@@ -1,0 +1,38 @@
+import react from "@vitejs/plugin-react";
+import {
+  defineConfig,
+} from "vitest/config";
+
+export default defineConfig({
+  plugins: [
+    react(),
+  ],
+
+  test: {
+    environment:
+      "jsdom",
+
+    globals:
+      true,
+
+    setupFiles: [
+      "./src/test/setupTests.js",
+    ],
+
+    include: [
+      "src/**/*.test.{js,jsx}",
+    ],
+
+    css:
+      true,
+
+    clearMocks:
+      true,
+
+    restoreMocks:
+      true,
+
+    mockReset:
+      true,
+  },
+});

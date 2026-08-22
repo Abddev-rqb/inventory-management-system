@@ -9,6 +9,7 @@ from rest_framework import serializers
 from apps.inventory.models import (
     Laptop,
     Return,
+    ReturnExpense,
 )
 from apps.inventory.roles import (
     ROLE_TECHNICIAN,
@@ -83,7 +84,12 @@ class ReturnReadSerializer(
         fields = (
             "id",
 
+            "source_type",
+            "source_laptop",
+            "source_inventory_status",
+
             "customer_name",
+            "customer_address",
 
             "company",
             "display_type",
@@ -178,6 +184,7 @@ class ReturnCreateSerializer(
 
         fields = (
             "customer_name",
+            "customer_address",
 
             "company",
             "display_type",
@@ -203,6 +210,15 @@ class ReturnCreateSerializer(
         return self._clean_required_text(
             value,
             "Customer name",
+        )
+
+    def validate_customer_address(
+        self,
+        value,
+    ):
+        return self._clean_required_text(
+            value,
+            "Customer address",
         )
 
     def validate_company(
@@ -339,6 +355,7 @@ class ReturnUpdateSerializer(
 
         fields = (
             "customer_name",
+            "customer_address",
 
             "company",
             "display_type",
@@ -364,6 +381,24 @@ class ReturnUpdateSerializer(
         return self._clean_required_text(
             value,
             "Customer name",
+        )
+
+    def validate_customer_address(
+        self,
+        value,
+    ):
+        if (
+            self.instance is not None
+            and self.instance.source_type
+            == Return.SourceType.INVENTORY_SERVICE
+        ):
+            return str(
+                value or ""
+            ).strip()
+
+        return self._clean_required_text(
+            value,
+            "Customer address",
         )
 
     def validate_company(
@@ -534,6 +569,37 @@ class ReturnStatusUpdateSerializer(
         ):
             return attrs
 
+        if (
+            return_record.source_type
+            == Return.SourceType.INVENTORY_SERVICE
+        ):
+            inventory_service_transitions = {
+                Return.Status.IN_SERVICE: {
+                    Return.Status.REPAIR_COMPLETED,
+                },
+                Return.Status.REPAIR_COMPLETED: {
+                    Return.Status.IN_SERVICE,
+                },
+            }
+
+            allowed_statuses = (
+                inventory_service_transitions.get(
+                    current_status,
+                    set(),
+                )
+            )
+
+            if new_status not in allowed_statuses:
+                raise serializers.ValidationError({
+                    "status": (
+                        "Inventory service laptops can "
+                        "move only between In Service "
+                        "and Repair Completed before Done."
+                    )
+                })
+
+            return attrs
+
         allowed_transitions = {
             Return.Status.RECEIVED: {
                 Return.Status.IN_SERVICE,
@@ -547,7 +613,6 @@ class ReturnStatusUpdateSerializer(
 
             Return.Status.REPAIR_COMPLETED: {
                 Return.Status.IN_SERVICE,
-                Return.Status.READY_FOR_DISPATCH,
             },
 
             Return.Status.SWAP_REQUESTED: {
@@ -1230,6 +1295,7 @@ class ReturnStockedInReadSerializer(
         fields = (
             "id",
             "customer_name",
+            "customer_address",
             "serial_number",
             "stocked_in_at",
             "stocked_in_by",
@@ -1331,3 +1397,81 @@ class ReturnStockedInReadSerializer(
             "area":
                 laptop.area,
         }
+
+class ReturnExpenseCreateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ReturnExpense
+        fields = (
+            "item_name",
+            "unit_price",
+            "quantity",
+        )
+
+    def validate_item_name(self, value):
+        cleaned = str(value or "").strip()
+        if not cleaned:
+            raise serializers.ValidationError("Item name cannot be empty.")
+        return cleaned
+
+    def create(self, validated_data):
+        request = self.context["request"]
+        return_record = self.context["return_record"]
+        return ReturnExpense.objects.create(
+            return_record=return_record,
+            created_by=request.user,
+            **validated_data,
+        )
+
+
+class ReturnExpenseReadSerializer(serializers.ModelSerializer):
+    return_id = serializers.IntegerField(source="return_record_id", read_only=True)
+    customer_name = serializers.CharField(source="return_record.customer_name", read_only=True)
+    company = serializers.CharField(source="return_record.company", read_only=True)
+    model_number = serializers.CharField(source="return_record.model_number", read_only=True)
+    serial_number = serializers.CharField(source="return_record.serial_number", read_only=True)
+    technician_name = serializers.SerializerMethodField()
+    created_by_name = serializers.SerializerMethodField()
+
+    class Meta:
+        model = ReturnExpense
+        fields = (
+            "id",
+            "return_id",
+            "customer_name",
+            "company",
+            "model_number",
+            "serial_number",
+            "technician_name",
+            "item_name",
+            "unit_price",
+            "quantity",
+            "total_amount",
+            "created_by",
+            "created_by_name",
+            "created_at",
+        )
+        read_only_fields = fields
+
+    def get_technician_name(self, obj):
+        user = obj.return_record.technician
+        if not user:
+            return None
+        return user.get_full_name().strip() or user.username
+
+    def get_created_by_name(self, obj):
+        user = obj.created_by
+        return user.get_full_name().strip() or user.username
+
+
+class ReturnExpenseFilterSerializer(serializers.Serializer):
+    search = serializers.CharField(required=False, allow_blank=True, trim_whitespace=True)
+    start_date = serializers.DateField(required=False)
+    end_date = serializers.DateField(required=False)
+
+    def validate(self, attrs):
+        start_date = attrs.get("start_date")
+        end_date = attrs.get("end_date")
+        if start_date and end_date and start_date > end_date:
+            raise serializers.ValidationError({"end_date": "End date cannot be before start date."})
+        return attrs
+

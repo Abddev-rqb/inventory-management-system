@@ -77,9 +77,6 @@ class LaptopExcelImportPreviewService:
         "available": Laptop.InventoryStatus.IN_STOCK,
         "in stock g": Laptop.InventoryStatus.IN_STOCK_G,
         "in_stock_g": Laptop.InventoryStatus.IN_STOCK_G,
-        "in service": Laptop.InventoryStatus.IN_SERVICE,
-        "inservice": Laptop.InventoryStatus.IN_SERVICE,
-        "service": Laptop.InventoryStatus.IN_SERVICE,
     }
 
     WARRANTY_MAP = {
@@ -557,7 +554,7 @@ class LaptopExcelImportPreviewService:
             value=value,
             field_name=field_name,
             choices=self.INVENTORY_STATUS_MAP,
-            expected_values="In Stock or In Service",
+            expected_values="In Stock or In Stock G",
         )
 
     def _normalize_warranty(self, value, field_name):

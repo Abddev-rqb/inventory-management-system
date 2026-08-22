@@ -23,6 +23,7 @@ class ReturnExcelExportService:
 
     HEADERS = (
         "Customer Name",
+        "Customer Address",
         "Company",
         "Display Type",
         "Model Number",
@@ -55,7 +56,7 @@ class ReturnExcelExportService:
         )
 
         worksheet.title = (
-            "Returns"
+            "Return Import"
         )
 
         worksheet.freeze_panes = (
@@ -78,6 +79,9 @@ class ReturnExcelExportService:
                 [
                     return_record
                     .customer_name,
+
+                    return_record
+                    .customer_address,
 
                     return_record
                     .company,
@@ -151,9 +155,9 @@ class ReturnExcelExportService:
                 min_row=2
             )
         ):
-            if row[17].value:
+            if row[18].value:
                 row[
-                    17
+                    18
                 ].number_format = (
                     "yyyy-mm-dd hh:mm"
                 )
@@ -215,23 +219,24 @@ class ReturnExcelExportService:
     ):
         widths = {
             "A": 24,
-            "B": 18,
-            "C": 16,
-            "D": 22,
+            "B": 40,
+            "C": 18,
+            "D": 16,
             "E": 22,
-            "F": 20,
-            "G": 12,
+            "F": 22,
+            "G": 20,
             "H": 12,
-            "I": 14,
-            "J": 22,
+            "I": 12,
+            "J": 14,
             "K": 22,
-            "L": 45,
-            "M": 14,
-            "N": 22,
-            "O": 14,
-            "P": 45,
-            "Q": 22,
+            "L": 22,
+            "M": 45,
+            "N": 14,
+            "O": 22,
+            "P": 18,
+            "Q": 45,
             "R": 22,
+            "S": 22,
         }
 
         for (

@@ -406,6 +406,18 @@ class Order(models.Model):
         ),
     )
 
+    source_return = (
+        models.OneToOneField(
+            "Return",
+            on_delete=models.PROTECT,
+            related_name=(
+                "fulfillment_order"
+            ),
+            null=True,
+            blank=True,
+        )
+    )
+
     customer_name = (
         models.CharField(
             max_length=150,
@@ -746,6 +758,19 @@ class OrderDeletionRequest(
         )
 
 class Return(models.Model):
+    class SourceType(
+        models.TextChoices
+    ):
+        CUSTOMER_RETURN = (
+            "customer_return",
+            "Customer Return",
+        )
+
+        INVENTORY_SERVICE = (
+            "inventory_service",
+            "Inventory Service",
+        )
+
     class Priority(
         models.TextChoices
     ):
@@ -807,10 +832,47 @@ class Return(models.Model):
             "Dispatched",
         )
 
+    source_type = models.CharField(
+        max_length=30,
+        choices=SourceType.choices,
+        default=SourceType.CUSTOMER_RETURN,
+        db_index=True,
+    )
+
+    source_laptop = (
+        models.ForeignKey(
+            Laptop,
+            on_delete=models.PROTECT,
+            related_name=(
+                "inventory_service_returns"
+            ),
+            null=True,
+            blank=True,
+        )
+    )
+
+    source_inventory_status = (
+        models.CharField(
+            max_length=20,
+            choices=(
+                Laptop.InventoryStatus.choices
+            ),
+            blank=True,
+            default="",
+        )
+    )
+
     customer_name = (
         models.CharField(
             max_length=150,
             db_index=True,
+        )
+    )
+
+    customer_address = (
+        models.TextField(
+            blank=True,
+            default="",
         )
     )
 
@@ -1061,3 +1123,81 @@ class Return(models.Model):
             f"{self.model_number} "
             f"({self.serial_number})"
         )
+
+class ReturnExpense(models.Model):
+    return_record = models.ForeignKey(
+        Return,
+        on_delete=models.CASCADE,
+        related_name="expenses",
+    )
+
+    item_name = models.CharField(
+        max_length=255,
+        db_index=True,
+    )
+
+    unit_price = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        validators=[
+            MinValueValidator(Decimal("0.01")),
+        ],
+    )
+
+    quantity = models.PositiveIntegerField(
+        validators=[
+            MinValueValidator(1),
+        ],
+    )
+
+    total_amount = models.DecimalField(
+        max_digits=14,
+        decimal_places=2,
+    )
+
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="created_return_expenses",
+    )
+
+    created_at = models.DateTimeField(
+        auto_now_add=True,
+        db_index=True,
+    )
+
+    updated_at = models.DateTimeField(
+        auto_now=True,
+    )
+
+    class Meta:
+        db_table = "inventory_return_expenses"
+        ordering = (
+            "-created_at",
+            "-id",
+        )
+        indexes = [
+            models.Index(
+                fields=[
+                    "return_record",
+                    "created_at",
+                ],
+                name="ret_exp_return_date_idx",
+            ),
+        ]
+
+    def save(self, *args, **kwargs):
+        self.total_amount = (
+            Decimal(str(self.unit_price))
+            * self.quantity
+        ).quantize(Decimal("0.01"))
+
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return (
+            f"{self.return_record.serial_number} - "
+            f"{self.item_name} - "
+            f"{self.total_amount}"
+        )
+

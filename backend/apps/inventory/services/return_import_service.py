@@ -36,6 +36,9 @@ class ReturnExcelImportPreviewService:
         "customername":
             "customer_name",
 
+        "customeraddress":
+            "customer_address",
+
         "company":
             "company",
 
@@ -81,6 +84,7 @@ class ReturnExcelImportPreviewService:
 
     REQUIRED_FIELDS = {
         "customer_name",
+        "customer_address",
         "company",
         "display_type",
         "model_number",
@@ -353,6 +357,14 @@ class ReturnExcelImportPreviewService:
             )
         )
 
+        customer_address = (
+            cls._text(
+                raw_data.get(
+                    "customer_address"
+                )
+            )
+        )
+
         company = cls._text(
             raw_data.get(
                 "company"
@@ -462,6 +474,9 @@ class ReturnExcelImportPreviewService:
         required_text = {
             "customer_name":
                 customer_name,
+
+            "customer_address":
+                customer_address,
 
             "company":
                 company,
@@ -724,6 +739,9 @@ class ReturnExcelImportPreviewService:
             "customer_name":
                 customer_name,
 
+            "customer_address":
+                customer_address,
+
             "company":
                 company,
 
@@ -752,7 +770,7 @@ class ReturnExcelImportPreviewService:
                 serial_number,
 
             "technician":
-                technician_id,
+                technician_name,
 
             "technician_username":
                 technician_name,

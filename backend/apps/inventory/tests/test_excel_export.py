@@ -273,12 +273,12 @@ class LaptopExcelExportTests(
 
         self.assertEqual(
             worksheet.max_row,
-            3,
+            2,
         )
 
         self.assertEqual(
             response["X-Exported-Rows"],
-            "2",
+            "1",
         )
 
     def test_empty_database_exports_header_only(self):

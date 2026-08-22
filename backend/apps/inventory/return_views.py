@@ -1,5 +1,6 @@
 from django.db.models import (
     Q,
+    Sum,
 )
 from django.contrib.auth import (
     get_user_model,
@@ -21,12 +22,16 @@ from rest_framework.response import (
 
 from apps.inventory.models import (
     Return,
+    ReturnExpense,
 )
 from apps.inventory.return_permissions import (
     ReturnPermission,
 )
 from apps.inventory.return_serializers import (
     ReturnCreateSerializer,
+    ReturnExpenseCreateSerializer,
+    ReturnExpenseFilterSerializer,
+    ReturnExpenseReadSerializer,
     ReturnFilterSerializer,
     ReturnImportConfirmSerializer,
     ReturnImportPreviewSerializer,
@@ -42,6 +47,7 @@ from apps.inventory.return_serializers import (
 )
 from apps.inventory.roles import (
     ROLE_ADMIN,
+    ROLE_SALES,
     ROLE_TECHNICIAN,
     get_user_role,
 )
@@ -49,6 +55,13 @@ from apps.inventory.roles import (
 from apps.inventory.services.return_stock_in_service import (
     ReturnStockInError,
     ReturnStockInService,
+)
+
+from apps.inventory.api_exceptions import (
+    OrderValidationError,
+)
+from apps.inventory.services.return_done_service import (
+    ReturnDoneService,
 )
 
 from datetime import (
@@ -92,6 +105,10 @@ from apps.inventory.services.return_stocked_in_export_service import (
 User = get_user_model()
 
 
+from apps.inventory.services.return_expense_service import (
+    ReturnExpenseService,
+)
+
 class ReturnViewSet(
     viewsets.ModelViewSet
 ):
@@ -115,6 +132,7 @@ class ReturnViewSet(
 
     search_fields = [
         "customer_name",
+        "customer_address",
         "company",
         "model_number",
         "processor",
@@ -148,7 +166,7 @@ class ReturnViewSet(
     def get_queryset(
         self,
     ):
-        return (
+        queryset = (
             Return.objects
             .select_related(
                 "technician",
@@ -158,6 +176,22 @@ class ReturnViewSet(
             )
             .all()
         )
+
+        if self.action == "list":
+            queryset = (
+                queryset
+                .exclude(
+                    status__in={
+                        Return.Status.STOCKED_IN,
+                        Return.Status.DISPATCHED,
+                    }
+                )
+                .filter(
+                    fulfillment_order__isnull=True
+                )
+            )
+
+        return queryset
 
     def get_serializer_class(
         self,
@@ -203,6 +237,22 @@ class ReturnViewSet(
                 ReturnStatusUpdateSerializer
             )
             
+        if (
+            self.action
+            == "add_expense"
+        ):
+            return (
+                ReturnExpenseCreateSerializer
+            )
+
+        if (
+            self.action
+            == "expenses"
+        ):
+            return (
+                ReturnExpenseReadSerializer
+            )
+
         if (
             self.action
             == "stock_in"
@@ -312,6 +362,68 @@ class ReturnViewSet(
         )
 
     @action(
+        detail=True,
+        methods=[
+            "post",
+        ],
+        url_path="done",
+    )
+    def complete_repair(
+        self,
+        request,
+        pk=None,
+    ):
+        try:
+            order, return_record = (
+                ReturnDoneService
+                .move_to_pending_order(
+                    return_id=pk,
+                    employee=request.user,
+                )
+            )
+        except OrderValidationError as exc:
+            return Response(
+                {
+                    "detail": str(exc),
+                },
+                status=(
+                    status.HTTP_400_BAD_REQUEST
+                ),
+            )
+
+        if order is None:
+            return Response(
+                {
+                    "message": (
+                        "Serviced inventory laptop "
+                        "returned to stock."
+                    ),
+                    "order_id": None,
+                    "order_number": None,
+                    "return": self._serialize_return(
+                        return_record,
+                        request,
+                    ),
+                },
+                status=status.HTTP_200_OK,
+            )
+
+        return Response(
+            {
+                "message": (
+                    "Return moved to Pending Orders."
+                ),
+                "order_id": order.id,
+                "order_number": order.order_number,
+                "return": self._serialize_return(
+                    return_record,
+                    request,
+                ),
+            },
+            status=status.HTTP_201_CREATED,
+        )
+
+    @action(
         detail=False,
         methods=[
             "get",
@@ -418,18 +530,22 @@ class ReturnViewSet(
         request,
         pk=None,
     ):
-        if (
+        role = (
             get_user_role(
                 request.user
             )
-            != ROLE_ADMIN
-        ):
+        )
+
+        if role not in {
+            ROLE_ADMIN,
+            ROLE_SALES,
+        }:
             return Response(
                 {
                     "detail": (
-                        "Only Admin users "
-                        "can assign return "
-                        "priority."
+                        "Only Admin or Sales "
+                        "users can assign "
+                        "return priority."
                     )
                 },
                 status=(
@@ -753,6 +869,137 @@ class ReturnViewSet(
             ),
         )
     
+    @action(
+        detail=True,
+        methods=["post"],
+        url_path="expenses",
+    )
+    def add_expense(
+        self,
+        request,
+        pk=None,
+    ):
+        return_record = self.get_object()
+
+        serializer = (
+            ReturnExpenseCreateSerializer(
+                data=request.data,
+                context={
+                    "request": request,
+                    "return_record": return_record,
+                },
+            )
+        )
+
+        serializer.is_valid(
+            raise_exception=True
+        )
+
+        expense = serializer.save()
+
+        return Response(
+            ReturnExpenseReadSerializer(
+                expense,
+                context={
+                    "request": request,
+                },
+            ).data,
+            status=status.HTTP_201_CREATED,
+        )
+
+    @action(
+        detail=False,
+        methods=["get"],
+        url_path="expenses",
+    )
+    def expenses(
+        self,
+        request,
+    ):
+        filter_serializer = (
+            ReturnExpenseFilterSerializer(
+                data=request.query_params,
+            )
+        )
+
+        filter_serializer.is_valid(
+            raise_exception=True
+        )
+
+        filters = filter_serializer.validated_data
+
+        search = filters.get(
+            "search",
+            "",
+        )
+
+        start_date = filters.get(
+            "start_date"
+        )
+
+        end_date = filters.get(
+            "end_date"
+        )
+
+        queryset = (
+            ReturnExpenseService
+            .get_queryset(
+                search=search,
+                start_date=start_date,
+                end_date=end_date,
+            )
+        )
+
+        total_expenses = (
+            ReturnExpenseService
+            .get_total(
+                queryset=queryset,
+            )
+        )
+
+        page = self.paginate_queryset(
+            queryset
+        )
+
+        if page is not None:
+            serializer = (
+                ReturnExpenseReadSerializer(
+                    page,
+                    many=True,
+                    context={
+                        "request": request,
+                    },
+                )
+            )
+
+            response = self.get_paginated_response(
+                serializer.data
+            )
+            response.data["summary"] = {
+                "total_expenses": total_expenses,
+            }
+            return response
+
+        serializer = (
+            ReturnExpenseReadSerializer(
+                queryset,
+                many=True,
+                context={
+                    "request": request,
+                },
+            )
+        )
+
+        return Response(
+            {
+                "summary": {
+                    "total_expenses": total_expenses,
+                },
+                "results": serializer.data,
+            },
+            status=status.HTTP_200_OK,
+        )
+
     def get_filtered_returns(
         self,
         request,
@@ -912,6 +1159,12 @@ class ReturnViewSet(
                 queryset.filter(
                     Q(
                         customer_name__icontains=(
+                            search
+                        )
+                    )
+                    |
+                    Q(
+                        customer_address__icontains=(
                             search
                         )
                     )

@@ -7,12 +7,17 @@ from decimal import Decimal
 
 from django.db.models import (
     Count,
+    Q,
     Sum,
 )
 from django.utils import timezone
 
 from apps.inventory.models import (
     Order,
+)
+
+from apps.inventory.services.return_expense_service import (
+    ReturnExpenseService,
 )
 
 
@@ -24,6 +29,7 @@ class OrderSalesService:
         start_date=None,
         end_date=None,
         employee_id=None,
+        search=None,
     ):
         queryset = (
             Order.objects
@@ -31,6 +37,9 @@ class OrderSalesService:
                 status=(
                     Order.Status.DISPATCHED
                 )
+            )
+            .filter(
+                source_return__isnull=True
             )
             .select_related(
                 "employee"
@@ -45,13 +54,11 @@ class OrderSalesService:
         )
 
         current_timezone = (
-            timezone.get_current_timezone()
+            timezone
+            .get_current_timezone()
         )
 
-        if (
-            start_date
-            is not None
-        ):
+        if start_date:
             start_datetime = (
                 timezone.make_aware(
                     datetime.combine(
@@ -70,13 +77,10 @@ class OrderSalesService:
                 )
             )
 
-        if (
-            end_date
-            is not None
-        ):
-            next_day = (
-                end_date +
-                timedelta(
+        if end_date:
+            next_date = (
+                end_date
+                + timedelta(
                     days=1
                 )
             )
@@ -84,7 +88,7 @@ class OrderSalesService:
             end_datetime = (
                 timezone.make_aware(
                     datetime.combine(
-                        next_day,
+                        next_date,
                         time.min,
                     ),
                     current_timezone,
@@ -99,10 +103,7 @@ class OrderSalesService:
                 )
             )
 
-        if (
-            employee_id
-            is not None
-        ):
+        if employee_id:
             queryset = (
                 queryset.filter(
                     employee_id=(
@@ -111,39 +112,119 @@ class OrderSalesService:
                 )
             )
 
-        return queryset
+        search_text = (
+            str(
+                search or ""
+            )
+            .strip()
+        )
 
+        if search_text:
+            queryset = (
+                queryset.filter(
+                    Q(
+                        order_number__icontains=(
+                            search_text
+                        )
+                    )
+                    |
+                    Q(
+                        customer_name__icontains=(
+                            search_text
+                        )
+                    )
+                    |
+                    Q(
+                        customer_address__icontains=(
+                            search_text
+                        )
+                    )
+                    |
+                    Q(
+                        employee__username__icontains=(
+                            search_text
+                        )
+                    )
+                    |
+                    Q(
+                        employee__first_name__icontains=(
+                            search_text
+                        )
+                    )
+                    |
+                    Q(
+                        employee__last_name__icontains=(
+                            search_text
+                        )
+                    )
+                    |
+                    Q(
+                        items__item_name__icontains=(
+                            search_text
+                        )
+                    )
+                    |
+                    Q(
+                        items__serial_number_snapshot__icontains=(
+                            search_text
+                        )
+                    )
+                )
+                .distinct()
+            )
+
+        return queryset
 
     @classmethod
     def get_summary(
         cls,
         *,
-        queryset,
+        start_date=None,
+        end_date=None,
+        employee_id=None,
+        search=None,
     ):
-        totals = (
+        queryset = (
+            cls.get_sales_queryset(
+                start_date=(
+                    start_date
+                ),
+                end_date=(
+                    end_date
+                ),
+                employee_id=(
+                    employee_id
+                ),
+                search=(
+                    search
+                ),
+            )
+        )
+
+        aggregates = (
             queryset.aggregate(
-                total_orders=(
-                    Count(
-                        "id"
-                    )
-                ),
-
-                total_items=(
-                    Sum(
-                        "total_items"
-                    )
-                ),
-
                 total_sales_amount=(
                     Sum(
                         "total_amount"
+                    )
+                ),
+                total_orders=(
+                    Count(
+                        "id",
+                        distinct=True,
+                    )
+                ),
+                total_items=(
+                    Sum(
+                        "total_items"
                     )
                 ),
             )
         )
 
         retail_total = (
-            queryset.filter(
+            queryset
+            .filter(
                 price_mode=(
                     Order.PriceMode.RETAIL
                 )
@@ -154,16 +235,18 @@ class OrderSalesService:
                         "total_amount"
                     )
                 )
-            )[
+            )
+            .get(
                 "total"
-            ]
+            )
             or Decimal(
                 "0.00"
             )
         )
 
         wholesale_total = (
-            queryset.filter(
+            queryset
+            .filter(
                 price_mode=(
                     Order.PriceMode.WHOLESALE
                 )
@@ -174,37 +257,52 @@ class OrderSalesService:
                         "total_amount"
                     )
                 )
-            )[
+            )
+            .get(
                 "total"
-            ]
+            )
             or Decimal(
                 "0.00"
             )
         )
 
+        total_expenses = (
+            ReturnExpenseService
+            .get_total(
+                start_date=start_date,
+                end_date=end_date,
+            )
+        )
+
         return {
-            "total_sales_amount": (
-                totals[
-                    "total_sales_amount"
-                ]
-                or Decimal(
-                    "0.00"
-                )
-            ),
+            "total_sales_amount":
+                (
+                    aggregates.get(
+                        "total_sales_amount"
+                    )
+                    or Decimal(
+                        "0.00"
+                    )
+                ),
 
-            "total_orders": (
-                totals[
-                    "total_orders"
-                ]
-                or 0
-            ),
+            "total_expenses":
+                total_expenses,
 
-            "total_items": (
-                totals[
-                    "total_items"
-                ]
-                or 0
-            ),
+            "total_orders":
+                (
+                    aggregates.get(
+                        "total_orders"
+                    )
+                    or 0
+                ),
+
+            "total_items":
+                (
+                    aggregates.get(
+                        "total_items"
+                    )
+                    or 0
+                ),
 
             "retail_sales":
                 retail_total,

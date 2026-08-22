@@ -1,6 +1,9 @@
 from decimal import Decimal
 from pathlib import Path
 
+from django.contrib.auth import (
+    get_user_model,
+)
 from rest_framework import serializers
 
 from apps.inventory.api_exceptions import (
@@ -10,11 +13,13 @@ from apps.inventory.api_exceptions import (
 from apps.inventory.models import (
     Laptop,
     Order,
+    Return,
     OrderDeletionRequest,
     OrderItem,
 )
 from apps.inventory.roles import (
     ROLE_SALES,
+    ROLE_TECHNICIAN,
     get_user_role,
 )
 from apps.inventory.services.order_creation_service import (
@@ -23,6 +28,78 @@ from apps.inventory.services.order_creation_service import (
 
 
 MAX_IMPORT_FILE_SIZE = 5 * 1024 * 1024
+
+
+User = get_user_model()
+
+
+class LaptopToServiceSerializer(
+    serializers.Serializer
+):
+    issue = serializers.CharField(
+        allow_blank=False,
+        trim_whitespace=True,
+    )
+
+    service_rack = serializers.CharField(
+        max_length=100,
+        allow_blank=False,
+        trim_whitespace=True,
+    )
+
+    priority = serializers.ChoiceField(
+        choices=Return.Priority.choices,
+        default=Return.Priority.NORMAL,
+    )
+
+    technician = (
+        serializers.PrimaryKeyRelatedField(
+            queryset=User.objects.all(),
+            required=False,
+            allow_null=True,
+        )
+    )
+
+    def validate_issue(self, value):
+        cleaned = str(value or "").strip()
+        if not cleaned:
+            raise serializers.ValidationError(
+                "Issue cannot be empty."
+            )
+        return cleaned
+
+    def validate_service_rack(
+        self,
+        value,
+    ):
+        cleaned = str(value or "").strip()
+        if not cleaned:
+            raise serializers.ValidationError(
+                "Service rack cannot be empty."
+            )
+        return cleaned
+
+    def validate_technician(
+        self,
+        technician,
+    ):
+        if technician is None:
+            return None
+
+        if (
+            not technician.is_active
+            or get_user_role(
+                technician
+            ) != ROLE_TECHNICIAN
+        ):
+            raise serializers.ValidationError(
+                (
+                    "The selected user must be "
+                    "an active Technician."
+                )
+            )
+
+        return technician
 
 
 class LaptopSerializer(
@@ -176,6 +253,24 @@ class LaptopSerializer(
             value=value,
             field_name="Area",
         )
+
+    def validate_inventory_status(
+        self,
+        value,
+    ):
+        if (
+            value
+            == Laptop.InventoryStatus.IN_SERVICE
+        ):
+            raise serializers.ValidationError(
+                (
+                    "In Service is controlled by "
+                    "the To Service workflow and "
+                    "cannot be selected manually."
+                )
+            )
+
+        return value
 
     def validate_quantity(
         self,
@@ -466,6 +561,7 @@ class OrderReadSerializer(
             "order_number",
             "employee",
             "employee_name",
+            "source_return",
             "customer_name",
             "customer_address",
             "price_mode",
@@ -484,6 +580,29 @@ class OrderReadSerializer(
         )
 
         read_only_fields = fields
+
+    def get_serial_numbers(
+        self,
+        obj,
+    ):
+        return [
+            item.serial_number_snapshot
+            for item in obj.items.all()
+            if item.serial_number_snapshot
+        ]
+
+    def get_serial_numbers(
+        self,
+        obj,
+    ):
+        return [
+            item.serial_number_snapshot
+            for item
+            in obj.items.all()
+            if (
+                item.serial_number_snapshot
+            )
+        ]
 
     def get_employee_name(
         self,
@@ -920,6 +1039,53 @@ class OrderDeletionRequestReadSerializer(
         )
 
 
+
+
+class OrderPendingFilterSerializer(
+    serializers.Serializer
+):
+    search = serializers.CharField(
+        required=False,
+        allow_blank=True,
+        trim_whitespace=True,
+    )
+
+    start_date = serializers.DateField(
+        required=False,
+    )
+
+    end_date = serializers.DateField(
+        required=False,
+    )
+
+    def validate(
+        self,
+        attrs,
+    ):
+        start_date = attrs.get(
+            "start_date"
+        )
+        end_date = attrs.get(
+            "end_date"
+        )
+
+        if (
+            start_date
+            and end_date
+            and start_date > end_date
+        ):
+            raise serializers.ValidationError(
+                {
+                    "end_date": (
+                        "End date cannot be before "
+                        "start date."
+                    )
+                }
+            )
+
+        return attrs
+
+
 class OrderSalesFilterSerializer(
     serializers.Serializer
 ):
@@ -940,6 +1106,12 @@ class OrderSalesFilterSerializer(
             required=False,
             min_value=1,
         )
+    )
+
+    search = serializers.CharField(
+        required=False,
+        allow_blank=True,
+        trim_whitespace=True,
     )
 
     def validate(
@@ -996,7 +1168,11 @@ class OrderSalesReadSerializer(
     items_text = (
         serializers.SerializerMethodField()
     )
-    
+
+    serial_numbers = (
+        serializers.SerializerMethodField()
+    )
+
     employee_name = (
         serializers.SerializerMethodField()
     )
@@ -1007,17 +1183,25 @@ class OrderSalesReadSerializer(
         fields = (
             "id",
             "order_number",
+
             "employee",
             "employee_name",
+
             "customer_name",
             "customer_address",
+
             "items_text",
+            "serial_numbers",
+
             "total_items",
             "total_amount",
+
             "price_mode",
             "price_mode_label",
+
             "via",
             "via_label",
+
             "created_at",
             "dispatched_at",
         )
@@ -1051,11 +1235,27 @@ class OrderSalesReadSerializer(
             for item
             in obj.items.all()
         ]
-        
+
+    def get_serial_numbers(
+        self,
+        obj,
+    ):
+        return [
+            item.serial_number_snapshot
+            for item
+            in obj.items.all()
+            if (
+                item.serial_number_snapshot
+            )
+        ]
+
     def get_employee_name(
         self,
         obj,
     ):
+        if not obj.employee:
+            return None
+
         full_name = (
             obj.employee
             .get_full_name()

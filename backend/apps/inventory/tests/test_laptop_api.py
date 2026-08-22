@@ -238,19 +238,34 @@ class LaptopAPITests(
 
         self.assertEqual(
             response.status_code,
-            status.HTTP_200_OK,
+            status.HTTP_400_BAD_REQUEST,
         )
 
-        laptop.refresh_from_db()
-
-        self.assertEqual(
-            laptop.inventory_status,
-            Laptop.InventoryStatus.IN_SERVICE,
+        self.assertFalse(
+            response.data["success"]
         )
 
         self.assertEqual(
-            laptop.area,
-            "service-room-table-3",
+            response.data["error"]["code"],
+            "validation_error",
+        )
+
+        self.assertIn(
+            "inventory_status",
+            response.data["error"]["details"],
+        )
+
+        self.assertIn(
+            (
+                "In Service is controlled by the "
+                "To Service workflow and cannot "
+                "be selected manually."
+            ),
+            str(
+                response.data["error"]["details"][
+                    "inventory_status"
+                ]
+            ),
         )
 
     def test_delete_laptop(self):

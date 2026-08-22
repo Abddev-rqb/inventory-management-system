@@ -34,13 +34,23 @@ from apps.inventory.serializers import (
     LaptopImportConfirmSerializer,
     LaptopImportPreviewSerializer,
     LaptopSerializer,
+    LaptopToServiceSerializer,
 )
 from apps.inventory.services.excel_export_service import (
     LaptopExcelExportService,
 )
+from apps.inventory.services.laptop_to_service_service import (
+    LaptopToServiceError,
+    LaptopToServiceService,
+)
 from apps.inventory.services.excel_import_service import (
     ExcelImportError,
     LaptopExcelImportPreviewService,
+)
+from apps.inventory.services.laptop_bulk_update_service import (
+    LaptopBulkUpdateConfirmationService,
+    LaptopBulkUpdateError,
+    LaptopBulkUpdatePreviewService,
 )
 from apps.inventory.services.import_confirmation_service import (
     ImportConfirmationConflictError,
@@ -96,6 +106,7 @@ from apps.inventory.serializers import (
     OrderDeletionRequestCreateSerializer,
     OrderDeletionRequestReadSerializer,
     OrderReadSerializer,
+    OrderPendingFilterSerializer,
     OrderSalesFilterSerializer,
     OrderSalesReadSerializer,
 )
@@ -147,7 +158,14 @@ class LaptopViewSet(viewsets.ModelViewSet):
 
     MAX_SYNCHRONOUS_EXPORT_ROWS = 25000
 
-    queryset = Laptop.objects.all()
+    # Laptops currently in service are intentionally hidden
+    # from the normal inventory list. They are managed from
+    # Active Returns until service is completed.
+    queryset = Laptop.objects.exclude(
+        inventory_status=(
+            Laptop.InventoryStatus.IN_SERVICE
+        )
+    )
 
     serializer_class = LaptopSerializer
 
@@ -204,6 +222,189 @@ class LaptopViewSet(viewsets.ModelViewSet):
         "-created_at",
         "-id",
     ]
+
+    def get_queryset(self):
+        # "In Service" is an internal workflow state, not a
+        # normal inventory bucket. Once a laptop is moved to
+        # service it disappears from Laptop Inventory and is
+        # managed from Active Returns until Done restores it.
+        queryset = Laptop.objects.exclude(
+            inventory_status=(
+                Laptop.InventoryStatus.IN_SERVICE
+            )
+        )
+
+        created_from = (
+            self.request.query_params.get(
+                "created_from",
+                "",
+            )
+            or ""
+        ).strip()
+
+        created_to = (
+            self.request.query_params.get(
+                "created_to",
+                "",
+            )
+            or ""
+        ).strip()
+
+        created_from_date = None
+        created_to_date = None
+
+        if created_from:
+            try:
+                created_from_date = (
+                    datetime.strptime(
+                        created_from,
+                        "%Y-%m-%d",
+                    )
+                    .date()
+                )
+            except ValueError:
+                from rest_framework.exceptions import ValidationError
+                raise ValidationError({
+                    "created_from": (
+                        "Use YYYY-MM-DD format."
+                    )
+                }) from None
+
+        if created_to:
+            try:
+                created_to_date = (
+                    datetime.strptime(
+                        created_to,
+                        "%Y-%m-%d",
+                    )
+                    .date()
+                )
+            except ValueError:
+                from rest_framework.exceptions import ValidationError
+                raise ValidationError({
+                    "created_to": (
+                        "Use YYYY-MM-DD format."
+                    )
+                }) from None
+
+        if (
+            created_from_date
+            and created_to_date
+            and created_from_date > created_to_date
+        ):
+            from rest_framework.exceptions import ValidationError
+            raise ValidationError({
+                "created_to": (
+                    "To date cannot be earlier "
+                    "than From date."
+                )
+            })
+
+        current_timezone = (
+            timezone.get_current_timezone()
+        )
+
+        if created_from_date:
+            start_datetime = (
+                timezone.make_aware(
+                    datetime.combine(
+                        created_from_date,
+                        time.min,
+                    ),
+                    current_timezone,
+                )
+            )
+
+            queryset = queryset.filter(
+                created_at__gte=(
+                    start_datetime
+                )
+            )
+
+        if created_to_date:
+            # Use the start of the following day as an
+            # exclusive boundary. This includes every record
+            # created on the selected To date, regardless of
+            # its time of day.
+            end_exclusive_date = (
+                created_to_date
+                + timedelta(days=1)
+            )
+
+            end_datetime = (
+                timezone.make_aware(
+                    datetime.combine(
+                        end_exclusive_date,
+                        time.min,
+                    ),
+                    current_timezone,
+                )
+            )
+
+            queryset = queryset.filter(
+                created_at__lt=(
+                    end_datetime
+                )
+            )
+
+        return queryset
+
+    @action(
+        detail=True,
+        methods=["patch"],
+        url_path="to-service",
+    )
+    def to_service(
+        self,
+        request,
+        pk=None,
+    ):
+        serializer = (
+            LaptopToServiceSerializer(
+                data=request.data
+            )
+        )
+        serializer.is_valid(
+            raise_exception=True
+        )
+
+        try:
+            laptop, return_record = (
+                LaptopToServiceService
+                .move_to_service(
+                    laptop_id=pk,
+                    created_by=request.user,
+                    **serializer.validated_data,
+                )
+            )
+        except LaptopToServiceError as exc:
+            return Response(
+                {"detail": str(exc)},
+                status=(
+                    status.HTTP_400_BAD_REQUEST
+                ),
+            )
+
+        return Response(
+            {
+                "message": (
+                    "Laptop moved to service "
+                    "successfully."
+                ),
+                "laptop": (
+                    LaptopSerializer(
+                        laptop,
+                        context={
+                            "request": request
+                        },
+                    ).data
+                ),
+                "return_id": (
+                    return_record.id
+                ),
+            },
+            status=status.HTTP_200_OK,
+        )
 
     @action(
         detail=False,
@@ -342,6 +543,282 @@ class LaptopViewSet(viewsets.ModelViewSet):
 
     @action(
         detail=False,
+        methods=["post"],
+        url_path="bulk-update/preview",
+        parser_classes=[
+            MultiPartParser,
+            FormParser,
+        ],
+        throttle_classes=[
+            LaptopImportRateThrottle,
+        ],
+    )
+    def bulk_update_preview(
+        self,
+        request,
+    ):
+        if not (
+            user_has_role(
+                request.user,
+                ROLE_ADMIN,
+            )
+            or user_has_role(
+                request.user,
+                ROLE_SALES,
+            )
+        ):
+            raise PermissionDenied(
+                (
+                    "Only Admin or Sales users "
+                    "can bulk update laptops."
+                )
+            )
+
+        upload_serializer = LaptopImportPreviewSerializer(
+            data=request.data,
+        )
+        upload_serializer.is_valid(
+            raise_exception=True,
+        )
+
+        try:
+            result = (
+                LaptopBulkUpdatePreviewService()
+                .preview(
+                    upload_serializer
+                    .validated_data["file"]
+                )
+            )
+        except LaptopBulkUpdateError as exc:
+            return Response(
+                {"detail": str(exc)},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        return Response(
+            result,
+            status=status.HTTP_200_OK,
+        )
+
+    @action(
+        detail=False,
+        methods=["post"],
+        url_path="bulk-update/confirm",
+        parser_classes=[JSONParser],
+        throttle_classes=[
+            LaptopImportRateThrottle,
+        ],
+    )
+    def bulk_update_confirm(
+        self,
+        request,
+    ):
+        if not (
+            user_has_role(
+                request.user,
+                ROLE_ADMIN,
+            )
+            or user_has_role(
+                request.user,
+                ROLE_SALES,
+            )
+        ):
+            raise PermissionDenied(
+                (
+                    "Only Admin or Sales users "
+                    "can bulk update laptops."
+                )
+            )
+
+        request_serializer = LaptopImportConfirmSerializer(
+            data=request.data,
+        )
+        request_serializer.is_valid(
+            raise_exception=True,
+        )
+
+        try:
+            result = (
+                LaptopBulkUpdateConfirmationService
+                .confirm(
+                    request_serializer
+                    .validated_data["rows"]
+                )
+            )
+        except LaptopBulkUpdateError as exc:
+            return Response(
+                {"detail": str(exc)},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        return Response(
+            {
+                "message": (
+                    f"{result['updated_rows']} laptop"
+                    f"{'s' if result['updated_rows'] != 1 else ''} "
+                    "updated successfully."
+                ),
+                **result,
+            },
+            status=status.HTTP_200_OK,
+        )
+
+    @action(
+        detail=False,
+        methods=["post"],
+        url_path="bulk-delete",
+        parser_classes=[JSONParser],
+    )
+    def bulk_delete(
+        self,
+        request,
+    ):
+        if not (
+            user_has_role(
+                request.user,
+                ROLE_ADMIN,
+            )
+            or user_has_role(
+                request.user,
+                ROLE_SALES,
+            )
+        ):
+            raise PermissionDenied(
+                (
+                    "Only Admin or Sales users "
+                    "can bulk delete laptops."
+                )
+            )
+
+        raw_ids = request.data.get(
+            "laptop_ids",
+            [],
+        )
+        if not isinstance(raw_ids, list) or not raw_ids:
+            return Response(
+                {
+                    "detail": (
+                        "Select at least one laptop to delete."
+                    )
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        normalized_ids = []
+        seen_ids = set()
+        for raw_id in raw_ids:
+            try:
+                laptop_id = int(raw_id)
+            except (TypeError, ValueError):
+                return Response(
+                    {
+                        "detail": (
+                            "Every laptop ID must be an integer."
+                        )
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            if laptop_id < 1:
+                return Response(
+                    {
+                        "detail": (
+                            "Every laptop ID must be greater than zero."
+                        )
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            if laptop_id not in seen_ids:
+                normalized_ids.append(laptop_id)
+                seen_ids.add(laptop_id)
+
+        from django.db import transaction
+
+        with transaction.atomic():
+            laptops = list(
+                Laptop.objects
+                .select_for_update()
+                .filter(id__in=normalized_ids)
+                .order_by("id")
+            )
+
+            found_ids = {laptop.id for laptop in laptops}
+            missing_ids = [
+                laptop_id
+                for laptop_id in normalized_ids
+                if laptop_id not in found_ids
+            ]
+            if missing_ids:
+                return Response(
+                    {
+                        "detail": (
+                            "Some selected laptops no longer exist: "
+                            + ", ".join(str(value) for value in missing_ids)
+                            + "."
+                        )
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            blocked = []
+            for laptop in laptops:
+                if laptop.inventory_status not in {
+                    Laptop.InventoryStatus.IN_STOCK,
+                    Laptop.InventoryStatus.IN_STOCK_G,
+                }:
+                    blocked.append(
+                        f"{laptop.serial_number}: status is "
+                        f"{laptop.get_inventory_status_display()}."
+                    )
+                    continue
+
+                if laptop.order_items.exists():
+                    blocked.append(
+                        f"{laptop.serial_number}: sales history exists."
+                    )
+                    continue
+
+                if laptop.inventory_service_returns.exists():
+                    blocked.append(
+                        f"{laptop.serial_number}: service history exists."
+                    )
+
+            if blocked:
+                return Response(
+                    {
+                        "detail": (
+                            "Bulk delete was cancelled. "
+                            + " ".join(blocked)
+                        )
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            deleted_ids = [laptop.id for laptop in laptops]
+            deleted_serials = [
+                laptop.serial_number
+                for laptop in laptops
+            ]
+
+            Laptop.objects.filter(
+                id__in=deleted_ids
+            ).delete()
+
+        return Response(
+            {
+                "message": (
+                    f"{len(deleted_ids)} laptop"
+                    f"{'s' if len(deleted_ids) != 1 else ''} "
+                    "deleted successfully."
+                ),
+                "deleted_rows": len(deleted_ids),
+                "deleted_ids": deleted_ids,
+                "serial_numbers": deleted_serials,
+            },
+            status=status.HTTP_200_OK,
+        )
+
+    @action(
+        detail=False,
         methods=["get"],
         url_path="export",
         url_name="export",
@@ -435,11 +912,110 @@ class OrderViewSet(
             "list",
             "retrieve",
         }:
-            return queryset.filter(
+            queryset = queryset.filter(
                 status=(
                     Order.Status.PENDING
                 ),
             )
+
+            if self.action == "list":
+                filter_serializer = (
+                    OrderPendingFilterSerializer(
+                        data=self.request.query_params,
+                    )
+                )
+
+                filter_serializer.is_valid(
+                    raise_exception=True,
+                )
+
+                filters = (
+                    filter_serializer.validated_data
+                )
+
+                search = str(
+                    filters.get(
+                        "search",
+                        "",
+                    )
+                    or ""
+                ).strip()
+
+                start_date = filters.get(
+                    "start_date"
+                )
+
+                end_date = filters.get(
+                    "end_date"
+                )
+
+                current_timezone = (
+                    timezone.get_current_timezone()
+                )
+
+                if start_date:
+                    start_datetime = (
+                        timezone.make_aware(
+                            datetime.combine(
+                                start_date,
+                                time.min,
+                            ),
+                            current_timezone,
+                        )
+                    )
+
+                    queryset = queryset.filter(
+                        created_at__gte=(
+                            start_datetime
+                        )
+                    )
+
+                if end_date:
+                    end_datetime = (
+                        timezone.make_aware(
+                            datetime.combine(
+                                end_date,
+                                time.max,
+                            ),
+                            current_timezone,
+                        )
+                    )
+
+                    queryset = queryset.filter(
+                        created_at__lte=(
+                            end_datetime
+                        )
+                    )
+
+                if search:
+                    queryset = queryset.filter(
+                        Q(
+                            order_number__icontains=search
+                        )
+                        | Q(
+                            customer_name__icontains=search
+                        )
+                        | Q(
+                            customer_address__icontains=search
+                        )
+                        | Q(
+                            employee__username__icontains=search
+                        )
+                        | Q(
+                            employee__first_name__icontains=search
+                        )
+                        | Q(
+                            employee__last_name__icontains=search
+                        )
+                        | Q(
+                            items__item_name__icontains=search
+                        )
+                        | Q(
+                            items__serial_number_snapshot__icontains=search
+                        )
+                    ).distinct()
+
+            return queryset
 
         return queryset
 
@@ -812,19 +1388,40 @@ class OrderViewSet(
             )
         )
 
+        search = (
+            filter_serializer
+            .validated_data
+            .get(
+                "search",
+                "",
+            )
+        )
+
         queryset = (
             OrderSalesService
             .get_sales_queryset(
                 start_date=start_date,
                 end_date=end_date,
                 employee_id=employee_id,
+                search=search,
             )
         )
 
         summary = (
             OrderSalesService
             .get_summary(
-                queryset=queryset,
+                start_date=(
+                    start_date
+                ),
+                end_date=(
+                    end_date
+                ),
+                employee_id=(
+                    employee_id
+                ),
+                search=(
+                    search
+                ),
             )
         )
 
@@ -917,6 +1514,15 @@ class OrderViewSet(
             .validated_data
             .get(
                 "employee_id"
+            )
+        )
+
+        search = (
+            filter_serializer
+            .validated_data
+            .get(
+                "search",
+                "",
             )
         )
 

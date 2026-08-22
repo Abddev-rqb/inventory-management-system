@@ -256,14 +256,12 @@ class LaptopBackendHardeningTests(APITestCase):
 
         self.assertEqual(
             response.data["count"],
-            1,
+            0,
         )
 
         self.assertEqual(
-            response.data["results"][0][
-                "serial_number"
-            ],
-            "SERVICE-001",
+            response.data["results"],
+            [],
         )
 
     def test_filter_by_minimum_ram(self):

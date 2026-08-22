@@ -51,6 +51,12 @@ class ReturnImportConfirmationService:
 
         seen_serials = set()
 
+        # -------------------------------------------------
+        # Revalidate every row before writing anything.
+        #
+        # This keeps confirmation atomic:
+        # if even one row is invalid, nothing is imported.
+        # -------------------------------------------------
         for row in rows:
             row_number = (
                 row[
@@ -94,6 +100,7 @@ class ReturnImportConfirmationService:
                 cleaned_data[
                     "serial_number"
                 ]
+                .strip()
                 .lower()
             )
 
@@ -123,28 +130,51 @@ class ReturnImportConfirmationService:
 
         created_returns = []
 
+        # -------------------------------------------------
+        # All rows passed validation.
+        # Create them inside the surrounding transaction.
+        # -------------------------------------------------
         for (
             row_number,
             data,
         ) in prepared_rows:
             technician = None
 
-            technician_id = (
-                data.get(
-                    "technician"
+            technician_username = (
+                str(
+                    data.get(
+                        "technician",
+                        "",
+                    )
+                    or ""
                 )
+                .strip()
             )
 
-            if technician_id:
+            # ---------------------------------------------
+            # Technician is optional.
+            #
+            # When present, the import contract now carries
+            # the technician USERNAME all the way from:
+            #
+            # Excel
+            # -> preview
+            # -> confirmation
+            #
+            # Therefore confirmation must resolve by
+            # username, not by primary-key ID.
+            # ---------------------------------------------
+            if technician_username:
                 try:
                     technician = (
                         User.objects.get(
-                            pk=technician_id
+                            username__iexact=(
+                                technician_username
+                            )
                         )
                     )
-                except (
-                    User.DoesNotExist
-                ):
+
+                except User.DoesNotExist:
                     raise (
                         ReturnImportConfirmationError(
                             (
@@ -164,8 +194,40 @@ class ReturnImportConfirmationService:
                                             "message":
                                                 (
                                                     "Technician "
-                                                    "no longer "
-                                                    "exists."
+                                                    "username "
+                                                    "does not "
+                                                    "exist."
+                                                ),
+                                        }
+                                    ],
+                                }
+                            ],
+                        )
+                    ) from None
+
+                except User.MultipleObjectsReturned:
+                    raise (
+                        ReturnImportConfirmationError(
+                            (
+                                "Technician username "
+                                "is ambiguous."
+                            ),
+                            errors=[
+                                {
+                                    "row_number":
+                                        row_number,
+
+                                    "errors": [
+                                        {
+                                            "field":
+                                                "technician",
+
+                                            "message":
+                                                (
+                                                    "More than one "
+                                                    "user matches "
+                                                    "this technician "
+                                                    "username."
                                                 ),
                                         }
                                     ],
@@ -175,18 +237,12 @@ class ReturnImportConfirmationService:
                     ) from None
 
                 if (
-                    not technician
-                    .is_active
-                    or get_user_role(
-                        technician
-                    )
-                    != ROLE_TECHNICIAN
+                    not technician.is_active
                 ):
                     raise (
                         ReturnImportConfirmationError(
                             (
-                                "Invalid "
-                                "technician."
+                                "Invalid technician."
                             ),
                             errors=[
                                 {
@@ -201,8 +257,43 @@ class ReturnImportConfirmationService:
                                             "message":
                                                 (
                                                     "Technician "
-                                                    "is no longer "
-                                                    "available."
+                                                    "account is "
+                                                    "inactive."
+                                                ),
+                                        }
+                                    ],
+                                }
+                            ],
+                        )
+                    )
+
+                if (
+                    get_user_role(
+                        technician
+                    )
+                    != ROLE_TECHNICIAN
+                ):
+                    raise (
+                        ReturnImportConfirmationError(
+                            (
+                                "Invalid technician."
+                            ),
+                            errors=[
+                                {
+                                    "row_number":
+                                        row_number,
+
+                                    "errors": [
+                                        {
+                                            "field":
+                                                "technician",
+
+                                            "message":
+                                                (
+                                                    "Selected user "
+                                                    "does not have "
+                                                    "the Technician "
+                                                    "role."
                                                 ),
                                         }
                                     ],
@@ -216,6 +307,12 @@ class ReturnImportConfirmationService:
                     customer_name=(
                         data[
                             "customer_name"
+                        ]
+                    ),
+
+                    customer_address=(
+                        data[
+                            "customer_address"
                         ]
                     ),
 

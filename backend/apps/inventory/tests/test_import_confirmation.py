@@ -66,9 +66,9 @@ class LaptopImportConfirmationTests(
                 "qc_status": Laptop.QCStatus.PENDING,
                 "qc_status_label": "Pending",
                 "inventory_status": (
-                    Laptop.InventoryStatus.IN_SERVICE
+                    Laptop.InventoryStatus.IN_STOCK_G
                 ),
-                "inventory_status_label": "In Service",
+                "inventory_status_label": "In Stock G",
                 "warranty_days": (
                     Laptop.WarrantyDays.FIFTEEN_DAYS
                 ),

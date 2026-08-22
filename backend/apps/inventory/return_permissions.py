@@ -120,6 +120,33 @@ class ReturnPermission(
             
         if (
             action
+            == "complete_repair"
+        ):
+            return (
+                role == ROLE_SALES
+                and user.has_perm(
+                    "inventory.change_return"
+                )
+            )
+
+        if (
+            action
+            == "add_expense"
+        ):
+            return role == ROLE_SALES
+
+        if (
+            action
+            == "expenses"
+        ):
+            return role in {
+                ROLE_INVENTORY_VIEWER,
+                ROLE_SALES,
+                ROLE_TECHNICIAN,
+            }
+
+        if (
+            action
             == "stock_in"
         ):
             return (
@@ -134,7 +161,10 @@ class ReturnPermission(
             action
             == "assign_priority"
         ):
-            return False
+            return (
+                role
+                == ROLE_SALES
+            )
 
         if (
             action

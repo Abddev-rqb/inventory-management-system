@@ -12,8 +12,10 @@ function InventoryActions({
     "/laptops",
   canAddLaptop = false,
   canExportLaptops = false,
+  canBulkManage = false,
   isExporting = false,
   onExport,
+  onStartBulkDelete,
 }) {
   const [
     isMenuOpen,
@@ -99,6 +101,21 @@ function InventoryActions({
     }
   }
 
+  function handleBulkDeleteClick() {
+    if (!canBulkManage) {
+      return;
+    }
+
+    closeMenu();
+
+    if (
+      typeof onStartBulkDelete ===
+      "function"
+    ) {
+      onStartBulkDelete();
+    }
+  }
+
   return (
     <div className="inventory-actions">
       {canAddLaptop ? (
@@ -144,7 +161,21 @@ function InventoryActions({
                 role="menuitem"
                 onClick={closeMenu}
               >
-                Import Excel
+                Import New Laptops
+              </Link>
+            ) : null}
+
+            {canBulkManage ? (
+              <Link
+                to="/laptops/import?mode=update"
+                state={{
+                  inventoryLocation,
+                }}
+                className="inventory-action-dropdown-item"
+                role="menuitem"
+                onClick={closeMenu}
+              >
+                Bulk Update Existing
               </Link>
             ) : null}
 
@@ -166,8 +197,22 @@ function InventoryActions({
               </button>
             ) : null}
 
+            {canBulkManage ? (
+              <button
+                type="button"
+                className="inventory-action-dropdown-item inventory-action-dropdown-danger"
+                role="menuitem"
+                onClick={
+                  handleBulkDeleteClick
+                }
+              >
+                Bulk Delete
+              </button>
+            ) : null}
+
             {!canAddLaptop &&
-            !canExportLaptops ? (
+            !canExportLaptops &&
+            !canBulkManage ? (
               <span className="inventory-action-dropdown-empty">
                 No actions available
               </span>

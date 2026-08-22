@@ -27,6 +27,10 @@ function TotalSalesTable({
             </th>
 
             <th scope="col">
+              Serial numbers
+            </th>
+
+            <th scope="col">
               Total items
             </th>
 
@@ -52,23 +56,17 @@ function TotalSalesTable({
           </tr>
         </thead>
 
-
         <tbody>
           {sales.map(
             (sale) => (
               <tr
-                key={
-                  sale.id
-                }
+                key={sale.id}
               >
                 <td>
-                  <strong>
-                    {displayValue(
-                      sale.employee_name,
-                    )}
-                  </strong>
+                  {displayValue(
+                    sale.employee_name,
+                  )}
                 </td>
-
 
                 <td>
                   <strong>
@@ -78,20 +76,17 @@ function TotalSalesTable({
                   </strong>
                 </td>
 
-
                 <td>
                   {displayValue(
                     sale.customer_name,
                   )}
                 </td>
 
-
                 <td>
                   {displayValue(
                     sale.customer_address,
                   )}
                 </td>
-
 
                 <td>
                   <ItemsCell
@@ -101,6 +96,13 @@ function TotalSalesTable({
                   />
                 </td>
 
+                <td>
+                  <SerialNumbersCell
+                    serialNumbers={
+                      sale.serial_numbers
+                    }
+                  />
+                </td>
 
                 <td>
                   {displayValue(
@@ -108,13 +110,11 @@ function TotalSalesTable({
                   )}
                 </td>
 
-
                 <td>
                   {formatMoney(
                     sale.total_amount,
                   )}
                 </td>
-
 
                 <td>
                   {sale.price_mode_label ||
@@ -123,7 +123,6 @@ function TotalSalesTable({
                     )}
                 </td>
 
-
                 <td>
                   {sale.via_label ||
                     formatChoice(
@@ -131,13 +130,11 @@ function TotalSalesTable({
                     )}
                 </td>
 
-
                 <td>
                   {formatDateTime(
                     sale.created_at,
                   )}
                 </td>
-
 
                 <td>
                   {formatDateTime(
@@ -158,11 +155,8 @@ function ItemsCell({
   items,
 }) {
   if (
-    !Array.isArray(
-      items,
-    ) ||
-    items.length ===
-      0
+    !Array.isArray(items) ||
+    items.length === 0
   ) {
     return "—";
   }
@@ -180,6 +174,39 @@ function ItemsCell({
             }
           >
             {item}
+          </span>
+        ),
+      )}
+    </div>
+  );
+}
+
+
+function SerialNumbersCell({
+  serialNumbers,
+}) {
+  if (
+    !Array.isArray(
+      serialNumbers,
+    ) ||
+    serialNumbers.length === 0
+  ) {
+    return "—";
+  }
+
+  return (
+    <div className="total-sales-serial-numbers">
+      {serialNumbers.map(
+        (
+          serialNumber,
+          index,
+        ) => (
+          <span
+            key={
+              `${serialNumber}-${index}`
+            }
+          >
+            {serialNumber}
           </span>
         ),
       )}
@@ -206,9 +233,7 @@ function displayValue(
 function formatChoice(
   value,
 ) {
-  if (
-    !value
-  ) {
+  if (!value) {
     return "—";
   }
 
@@ -243,26 +268,16 @@ function formatMoney(
     return "—";
   }
 
-  return (
-    new Intl.NumberFormat(
-      "en-IN",
-      {
-        style:
-          "currency",
-
-        currency:
-          "INR",
-
-        minimumFractionDigits:
-          2,
-
-        maximumFractionDigits:
-          2,
-      },
-    )
-    .format(
-      amount,
-    )
+  return new Intl.NumberFormat(
+    "en-IN",
+    {
+      style: "currency",
+      currency: "INR",
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    },
+  ).format(
+    amount,
   );
 }
 
@@ -270,9 +285,7 @@ function formatMoney(
 function formatDateTime(
   value,
 ) {
-  if (
-    !value
-  ) {
+  if (!value) {
     return "—";
   }
 
@@ -289,20 +302,14 @@ function formatDateTime(
     return "—";
   }
 
-  return (
-    new Intl.DateTimeFormat(
-      "en-IN",
-      {
-        dateStyle:
-          "medium",
-
-        timeStyle:
-          "short",
-      },
-    )
-    .format(
-      date,
-    )
+  return new Intl.DateTimeFormat(
+    "en-IN",
+    {
+      dateStyle: "medium",
+      timeStyle: "short",
+    },
+  ).format(
+    date,
   );
 }
 

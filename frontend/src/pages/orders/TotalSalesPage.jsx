@@ -30,6 +30,9 @@ const EMPTY_SUMMARY = {
   total_sales_amount:
     "0.00",
 
+  total_expenses:
+    "0.00",
+
   total_orders:
     0,
 
@@ -45,6 +48,11 @@ const EMPTY_SUMMARY = {
 
 
 function TotalSalesPage() {
+  const [
+    searchText,
+    setSearchText,
+  ] = useState("");
+
   const [
     selectedEmployeeId,
     setSelectedEmployeeId,
@@ -69,6 +77,9 @@ function TotalSalesPage() {
     appliedFilters,
     setAppliedFilters,
   ] = useState({
+    search:
+      "",
+
     start_date:
       "",
 
@@ -145,6 +156,13 @@ function TotalSalesPage() {
         };
 
         if (
+          appliedFilters.search
+        ) {
+          params.search =
+            appliedFilters.search;
+        }
+
+        if (
           appliedFilters
             .start_date
         ) {
@@ -184,6 +202,13 @@ function TotalSalesPage() {
     useMemo(
       () => {
         const params = {};
+
+        if (
+          appliedFilters.search
+        ) {
+          params.search =
+            appliedFilters.search;
+        }
 
         if (
           appliedFilters
@@ -436,6 +461,9 @@ function TotalSalesPage() {
     );
 
     setAppliedFilters({
+      search:
+        String(searchText).trim(),
+
       start_date:
         startDate,
 
@@ -449,6 +477,10 @@ function TotalSalesPage() {
 
 
   function handleClearFilters() {
+    setSearchText(
+      "",
+    );
+
     setStartDate(
       "",
     );
@@ -474,6 +506,9 @@ function TotalSalesPage() {
     );
 
     setAppliedFilters({
+      search:
+        "",
+
       start_date:
         "",
 
@@ -579,6 +614,22 @@ function TotalSalesPage() {
         }
       >
         <div className="sales-filter-fields">
+          <label className="sale-field sales-search-field">
+            <span>Search</span>
+
+            <input
+              type="search"
+              value={searchText}
+              placeholder="Order, customer, serial, item..."
+              onChange={(event) =>
+                setSearchText(
+                  event.target.value,
+                )
+              }
+            />
+          </label>
+
+
           <label className="sale-field sales-date-field">
             <span>
               From
@@ -755,6 +806,16 @@ function TotalSalesPage() {
             formatMoney(
               summary
                 .total_sales_amount,
+            )
+          }
+        />
+
+        <SalesSummaryCard
+          label="Total expenses"
+          value={
+            formatMoney(
+              summary
+                .total_expenses,
             )
           }
         />
@@ -994,6 +1055,7 @@ function hasActiveFilters(
   filters,
 ) {
   return Boolean(
+    filters.search ||
     filters.start_date ||
     filters.end_date ||
     filters.employee_id,
@@ -1006,6 +1068,12 @@ function buildFilterLabel(
   employee,
 ) {
   const parts = [];
+
+  if (filters.search) {
+    parts.push(
+      `Search: ${filters.search}`,
+    );
+  }
 
   if (
     filters.start_date &&
@@ -1170,6 +1238,22 @@ function buildExportFilename(
   const pieces = [
     "total-sales",
   ];
+
+  if (filters.search) {
+    const safeSearch = String(
+      filters.search,
+    )
+      .trim()
+      .replace(/[^a-zA-Z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "")
+      .slice(0, 30);
+
+    if (safeSearch) {
+      pieces.push(
+        `search-${safeSearch}`,
+      );
+    }
+  }
 
   if (
     filters.employee_id

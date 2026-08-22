@@ -9,6 +9,9 @@ function LaptopTable({
   selectedLaptopIds =
     new Set(),
   onToggleLaptop = null,
+  canMoveToService = false,
+  movingLaptopId = null,
+  onMoveToService = null,
 }) {
   return (
     <div className="table-scroll-container">
@@ -85,6 +88,16 @@ function LaptopTable({
             <th scope="col">
               Area
             </th>
+
+            <th scope="col">
+              Created at
+            </th>
+
+            {!isSelectionMode ? (
+              <th scope="col">
+                Actions
+              </th>
+            ) : null}
           </tr>
         </thead>
 
@@ -249,6 +262,45 @@ function LaptopTable({
                       laptop.area,
                     )}
                   </td>
+
+                  <td>
+                    {formatDateTime(
+                      laptop.created_at,
+                    )}
+                  </td>
+
+                  {!isSelectionMode ? (
+                    <td>
+                      {
+                        canMoveToService
+                        && canMoveLaptopToService(
+                          laptop,
+                        )
+                        && onMoveToService
+                          ? (
+                              <button
+                                type="button"
+                                className="button button-secondary"
+                                disabled={
+                                  movingLaptopId === laptopId
+                                }
+                                onClick={() =>
+                                  onMoveToService(
+                                    laptop,
+                                  )
+                                }
+                              >
+                                {
+                                  movingLaptopId === laptopId
+                                    ? "Moving..."
+                                    : "To Service"
+                                }
+                              </button>
+                            )
+                          : "—"
+                      }
+                    </td>
+                  ) : null}
                 </tr>
               );
             },
@@ -428,6 +480,42 @@ function displayValue(
   }
 
   return value;
+}
+
+
+function canMoveLaptopToService(
+  laptop,
+) {
+  return (
+    Number(laptop.quantity) === 1
+    && (
+      laptop.inventory_status === "in_stock"
+      || laptop.inventory_status === "in_stock_g"
+    )
+  );
+}
+
+
+function formatDateTime(
+  value,
+) {
+  if (!value) {
+    return "—";
+  }
+
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return "—";
+  }
+
+  return new Intl.DateTimeFormat(
+    "en-IN",
+    {
+      dateStyle: "medium",
+      timeStyle: "short",
+    },
+  ).format(date);
 }
 
 

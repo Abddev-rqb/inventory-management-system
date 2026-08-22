@@ -6,11 +6,16 @@ function ReturnsTable({
   canUpdateStatus,
   canStockIn,
   canEdit,
+  canAddExpense,
+  canCompleteReturn,
+  completingReturnId,
   onSelectReturn,
   onAssignTechnician,
   onUpdateStatus,
   onStockIn,
   onEdit,
+  onExpense,
+  onDone,
 }) {
   return (
     <div className="returns-table-section">
@@ -26,6 +31,10 @@ function ReturnsTable({
 
               <th>
                 Customer Name
+              </th>
+
+              <th>
+                Address
               </th>
 
               <th>
@@ -107,6 +116,15 @@ function ReturnsTable({
                     {
                       returnRecord
                         .customer_name
+                    }
+                  </td>
+
+
+                  <td className="returns-address-cell">
+                    {
+                      returnRecord
+                        .customer_address
+                      || "—"
                     }
                   </td>
 
@@ -195,7 +213,53 @@ function ReturnsTable({
                           Edit
                         </button>
                       ) : null}
+
+                      {canAddExpense ? (
+                        <button
+                          type="button"
+                          className="table-action-button"
+                          onClick={() =>
+                            onExpense(
+                              returnRecord,
+                            )
+                          }
+                        >
+                          Expense
+                        </button>
+                      ) : null}
                       
+                      {canCompleteReturn ? (
+                        <button
+                          type="button"
+                          className="table-action-button"
+                          disabled={
+                            returnRecord.status
+                              !== "repair_completed"
+                            || completingReturnId
+                              !== null
+                          }
+                          title={
+                            returnRecord.status
+                              === "repair_completed"
+                              ? "Move to Pending Orders"
+                              : (
+                                  "Done becomes available "
+                                  + "after Repair Completed."
+                                )
+                          }
+                          onClick={() =>
+                            onDone(
+                              returnRecord,
+                            )
+                          }
+                        >
+                          {completingReturnId
+                            === returnRecord.id
+                            ? "Moving..."
+                            : "Done"}
+                        </button>
+                      ) : null}
+
                       {canAssignTechnician ? (
                         <button
                           type="button"

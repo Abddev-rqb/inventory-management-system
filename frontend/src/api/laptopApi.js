@@ -6,6 +6,8 @@ export async function getLaptops({
   pageSize = 25,
   searchTerms = [],
   ordering = "-created_at",
+  createdFrom = "",
+  createdTo = "",
 } = {}) {
   const search =
     buildSearchValue(
@@ -24,6 +26,16 @@ export async function getLaptops({
   ) {
     params.search =
       search;
+  }
+
+  if (createdFrom) {
+    params.created_from =
+      createdFrom;
+  }
+
+  if (createdTo) {
+    params.created_to =
+      createdTo;
   }
 
   const response =
@@ -226,4 +238,83 @@ export async function exportLaptops(
       ] ??
       null,
   };
+}
+
+export async function getServiceTechnicians() {
+  const response =
+    await axiosClient.get(
+      "/returns/technicians/",
+    );
+
+  return Array.isArray(
+    response.data,
+  )
+    ? response.data
+    : [];
+}
+
+
+export async function moveLaptopToService(
+  laptopId,
+  payload,
+) {
+  const response =
+    await axiosClient.patch(
+      `/laptops/${laptopId}/to-service/`,
+      payload,
+    );
+
+  return response.data;
+}
+
+
+export async function previewLaptopBulkUpdate(
+  excelFile,
+) {
+  const formData =
+    new FormData();
+
+  formData.append(
+    "file",
+    excelFile,
+  );
+
+  const response =
+    await axiosClient.post(
+      "/laptops/bulk-update/preview/",
+      formData,
+    );
+
+  return response.data;
+}
+
+
+export async function confirmLaptopBulkUpdate(
+  rows,
+) {
+  const response =
+    await axiosClient.post(
+      "/laptops/bulk-update/confirm/",
+      {
+        rows,
+      },
+    );
+
+  return response.data;
+}
+
+
+export async function bulkDeleteLaptops(
+  laptopIds,
+) {
+  const response =
+    await axiosClient.post(
+      "/laptops/bulk-delete/",
+      {
+        laptop_ids:
+          laptopIds,
+      },
+    );
+
+  return response.data;
 }

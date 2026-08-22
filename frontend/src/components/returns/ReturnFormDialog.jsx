@@ -5,11 +5,11 @@ import {
 } from "react";
 
 
-const INITIAL_FORM = {
+const EMPTY_FORM = {
   customer_name: "",
+  customer_address: "",
   company: "",
-  display_type:
-    "non_touch",
+  display_type: "non_touch",
   model_number: "",
   processor: "",
   processor_generation: "",
@@ -25,97 +25,78 @@ const INITIAL_FORM = {
 
 function ReturnFormDialog({
   isOpen,
-  technicians,
+  technicians = [],
   isSubmitting,
   errorMessage,
   onClose,
   onSubmit,
 }) {
-  const dialogRef =
-    useRef(null);
+  const dialogRef = useRef(null);
 
-  const [
-    form,
-    setForm,
-  ] = useState(
-    INITIAL_FORM,
+  const [form, setForm] = useState(
+    EMPTY_FORM,
   );
 
 
   useEffect(() => {
-    const dialog =
-      dialogRef.current;
+    const dialog = dialogRef.current;
 
     if (!dialog) {
       return;
     }
 
-    if (
-      isOpen &&
-      !dialog.open
-    ) {
-      setForm(
-        INITIAL_FORM,
-      );
-
+    if (isOpen && !dialog.open) {
+      setForm(EMPTY_FORM);
       dialog.showModal();
-
       return;
     }
 
-    if (
-      !isOpen &&
-      dialog.open
-    ) {
+    if (!isOpen && dialog.open) {
       dialog.close();
     }
-  }, [
-    isOpen,
-  ]);
+  }, [isOpen]);
 
 
-  function handleChange(
-    event,
-  ) {
-    const {
-      name,
-      value,
-    } = event.target;
+  function handleChange(event) {
+    const { name, value } = event.target;
 
-    setForm(
-      (
-        currentForm,
-      ) => ({
-        ...currentForm,
-        [name]: value,
-      }),
-    );
+    setForm((current) => ({
+      ...current,
+      [name]: value,
+    }));
   }
 
 
-  function handleSubmit(
-    event,
-  ) {
+  function handleSubmit(event) {
     event.preventDefault();
 
     onSubmit({
       ...form,
-
+      customer_name:
+        form.customer_name.trim(),
+      customer_address:
+        form.customer_address.trim(),
+      company:
+        form.company.trim(),
+      model_number:
+        form.model_number.trim(),
+      processor:
+        form.processor.trim(),
+      processor_generation:
+        form.processor_generation.trim(),
+      serial_number:
+        form.serial_number.trim(),
+      issue:
+        form.issue.trim(),
+      service_rack:
+        form.service_rack.trim(),
       ram_gb:
-        Number(
-          form.ram_gb,
-        ),
-
+        Number(form.ram_gb),
       storage_gb:
-        Number(
-          form.storage_gb,
-        ),
-
+        Number(form.storage_gb),
       technician:
         form.technician
-          ? Number(
-              form.technician,
-            )
+          ? Number(form.technician)
           : null,
     });
   }
@@ -125,21 +106,17 @@ function ReturnFormDialog({
     <dialog
       ref={dialogRef}
       className="return-form-dialog"
-      onCancel={
-        (event) => {
-          event.preventDefault();
+      onCancel={(event) => {
+        event.preventDefault();
 
-          if (!isSubmitting) {
-            onClose();
-          }
+        if (!isSubmitting) {
+          onClose();
         }
-      }
+      }}
     >
       <form
         className="return-form-card"
-        onSubmit={
-          handleSubmit
-        }
+        onSubmit={handleSubmit}
       >
         <header className="return-form-header">
           <div>
@@ -147,295 +124,192 @@ function ReturnFormDialog({
               Returns
             </p>
 
-            <h2>
-              Add Return
-            </h2>
+            <h2>Add Return</h2>
           </div>
 
           <button
             type="button"
             className="dialog-close-button"
-            disabled={
-              isSubmitting
-            }
-            onClick={
-              onClose
-            }
+            disabled={isSubmitting}
+            onClick={onClose}
           >
             ×
           </button>
         </header>
 
 
-        {errorMessage ? (
-          <div
-            className="form-level-error"
-            role="alert"
-          >
-            {errorMessage}
-          </div>
-        ) : null}
-
-
         <div className="return-form-scroll">
-          <ReturnFormSection
-            title="Customer"
-          >
-            <ReturnField
-              label="Customer name"
+          {errorMessage ? (
+            <div
+              className="form-level-error"
+              role="alert"
             >
+              {errorMessage}
+            </div>
+          ) : null}
+
+
+          <div className="return-form-grid">
+            <Field label="Customer Name">
               <input
                 name="customer_name"
-                value={
-                  form.customer_name
-                }
-                onChange={
-                  handleChange
-                }
+                value={form.customer_name}
+                onChange={handleChange}
                 required
               />
-            </ReturnField>
-          </ReturnFormSection>
+            </Field>
 
-
-          <ReturnFormSection
-            title="Laptop details"
-          >
-            <ReturnField
-              label="Company"
+            <Field
+              label="Customer Address"
+              fullWidth
             >
+              <textarea
+                rows="3"
+                name="customer_address"
+                value={form.customer_address}
+                onChange={handleChange}
+                required
+              />
+            </Field>
+
+            <Field label="Company">
               <input
                 name="company"
-                value={
-                  form.company
-                }
-                onChange={
-                  handleChange
-                }
+                value={form.company}
+                onChange={handleChange}
                 required
               />
-            </ReturnField>
+            </Field>
 
-
-            <ReturnField
-              label="Display type"
-            >
+            <Field label="Display Type">
               <select
                 name="display_type"
-                value={
-                  form.display_type
-                }
-                onChange={
-                  handleChange
-                }
+                value={form.display_type}
+                onChange={handleChange}
               >
                 <option value="non_touch">
                   Non-Touch
                 </option>
-
                 <option value="touch">
                   Touch
                 </option>
               </select>
-            </ReturnField>
+            </Field>
 
-
-            <ReturnField
-              label="Model number"
-            >
+            <Field label="Model Number">
               <input
                 name="model_number"
-                value={
-                  form.model_number
-                }
-                onChange={
-                  handleChange
-                }
-                required
-              />
-            </ReturnField>
-
-
-            <ReturnField
-              label="Processor"
-            >
-              <input
-                name="processor"
-                value={
-                  form.processor
-                }
-                onChange={
-                  handleChange
-                }
-                required
-              />
-            </ReturnField>
-
-
-            <ReturnField
-              label="Processor generation"
-            >
-              <input
-                name="processor_generation"
-                value={
-                  form.processor_generation
-                }
-                onChange={
-                  handleChange
-                }
-              />
-            </ReturnField>
-
-
-            <ReturnField
-              label="RAM GB"
-            >
-              <input
-                type="number"
-                name="ram_gb"
-                min="1"
-                step="1"
-                value={
-                  form.ram_gb
-                }
-                onChange={
-                  handleChange
-                }
-                required
-              />
-            </ReturnField>
-
-
-            <ReturnField
-              label="Storage GB"
-            >
-              <input
-                type="number"
-                name="storage_gb"
-                min="1"
-                step="1"
-                value={
-                  form.storage_gb
-                }
-                onChange={
-                  handleChange
-                }
-                required
-              />
-            </ReturnField>
-
-
-            <ReturnField
-              label="Storage type"
-            >
-              <select
-                name="storage_type"
-                value={
-                  form.storage_type
-                }
-                onChange={
-                  handleChange
-                }
-              >
-                <option value="ssd">
-                  SSD
-                </option>
-
-                <option value="hdd">
-                  HDD
-                </option>
-              </select>
-            </ReturnField>
-
-
-            <ReturnField
-              label="Serial number"
-            >
-              <input
-                name="serial_number"
-                value={
-                  form.serial_number
-                }
-                onChange={
-                  handleChange
-                }
-                required
-              />
-            </ReturnField>
-          </ReturnFormSection>
-
-
-          <ReturnFormSection
-            title="Service"
-          >
-            <ReturnField
-              label="Issue"
-              fullWidth
-            >
-              <textarea
-                name="issue"
-                rows="4"
-                value={
-                  form.issue
-                }
-                onChange={
-                  handleChange
-                }
-                required
-              />
-            </ReturnField>
-
-
-            <ReturnField
-              label="Service rack"
-            >
-              <input
-                name="service_rack"
-                value={form.service_rack}
-                placeholder="Enter service rack"
+                value={form.model_number}
                 onChange={handleChange}
                 required
               />
-            </ReturnField>
+            </Field>
 
+            <Field label="Processor">
+              <input
+                name="processor"
+                value={form.processor}
+                onChange={handleChange}
+                required
+              />
+            </Field>
 
-            <ReturnField
-              label="Technician"
-            >
+            <Field label="Processor Generation">
+              <input
+                name="processor_generation"
+                value={form.processor_generation}
+                onChange={handleChange}
+              />
+            </Field>
+
+            <Field label="RAM GB">
+              <input
+                type="number"
+                min="1"
+                name="ram_gb"
+                value={form.ram_gb}
+                onChange={handleChange}
+                required
+              />
+            </Field>
+
+            <Field label="Storage GB">
+              <input
+                type="number"
+                min="1"
+                name="storage_gb"
+                value={form.storage_gb}
+                onChange={handleChange}
+                required
+              />
+            </Field>
+
+            <Field label="Storage Type">
+              <select
+                name="storage_type"
+                value={form.storage_type}
+                onChange={handleChange}
+              >
+                <option value="ssd">SSD</option>
+                <option value="hdd">HDD</option>
+              </select>
+            </Field>
+
+            <Field label="Serial Number">
+              <input
+                name="serial_number"
+                value={form.serial_number}
+                onChange={handleChange}
+                required
+              />
+            </Field>
+
+            <Field label="Service Rack">
+              <input
+                name="service_rack"
+                value={form.service_rack}
+                onChange={handleChange}
+                required
+              />
+            </Field>
+
+            <Field label="Technician">
               <select
                 name="technician"
-                value={
-                  form.technician
-                }
-                onChange={
-                  handleChange
-                }
+                value={form.technician}
+                onChange={handleChange}
               >
                 <option value="">
                   Unassigned
                 </option>
 
                 {technicians.map(
-                  (
-                    technician,
-                  ) => (
+                  (technician) => (
                     <option
-                      key={
-                        technician.id
-                      }
-                      value={
-                        technician.id
-                      }
+                      key={technician.id}
+                      value={technician.id}
                     >
-                      {
-                        technician.name
-                      }
+                      {technician.name
+                        || technician.username}
                     </option>
                   ),
                 )}
               </select>
-            </ReturnField>
-          </ReturnFormSection>
+            </Field>
+
+            <Field
+              label="Issue"
+              fullWidth
+            >
+              <textarea
+                rows="4"
+                name="issue"
+                value={form.issue}
+                onChange={handleChange}
+                required
+              />
+            </Field>
+          </div>
         </div>
 
 
@@ -443,12 +317,8 @@ function ReturnFormDialog({
           <button
             type="button"
             className="button button-secondary"
-            disabled={
-              isSubmitting
-            }
-            onClick={
-              onClose
-            }
+            disabled={isSubmitting}
+            onClick={onClose}
           >
             Cancel
           </button>
@@ -456,12 +326,10 @@ function ReturnFormDialog({
           <button
             type="submit"
             className="button button-primary"
-            disabled={
-              isSubmitting
-            }
+            disabled={isSubmitting}
           >
             {isSubmitting
-              ? "Saving..."
+              ? "Adding..."
               : "Add Return"}
           </button>
         </footer>
@@ -471,25 +339,7 @@ function ReturnFormDialog({
 }
 
 
-function ReturnFormSection({
-  title,
-  children,
-}) {
-  return (
-    <section className="return-form-section">
-      <h3>
-        {title}
-      </h3>
-
-      <div className="return-form-grid">
-        {children}
-      </div>
-    </section>
-  );
-}
-
-
-function ReturnField({
+function Field({
   label,
   children,
   fullWidth = false,
@@ -498,17 +348,11 @@ function ReturnField({
     <label
       className={
         fullWidth
-          ? (
-              "return-field "
-              + "return-field-full"
-            )
+          ? "return-field return-field-full"
           : "return-field"
       }
     >
-      <span>
-        {label}
-      </span>
-
+      <span>{label}</span>
       {children}
     </label>
   );

@@ -106,6 +106,68 @@ function PendingOrdersPage() {
   ] = useState(null);
 
 
+  const [
+    searchText,
+    setSearchText,
+  ] = useState("");
+
+  const [
+    startDate,
+    setStartDate,
+  ] = useState("");
+
+  const [
+    endDate,
+    setEndDate,
+  ] = useState("");
+
+  const [
+    appliedFilters,
+    setAppliedFilters,
+  ] = useState({
+    search: "",
+    start_date: "",
+    end_date: "",
+  });
+
+  const [
+    filterError,
+    setFilterError,
+  ] = useState(null);
+
+
+  const queryParams =
+    useMemo(
+      () => {
+        const params = {};
+
+        if (
+          appliedFilters.search
+        ) {
+          params.search =
+            appliedFilters.search;
+        }
+
+        if (
+          appliedFilters.start_date
+        ) {
+          params.start_date =
+            appliedFilters.start_date;
+        }
+
+        if (
+          appliedFilters.end_date
+        ) {
+          params.end_date =
+            appliedFilters.end_date;
+        }
+
+        return params;
+      },
+      [appliedFilters],
+    );
+
+
   const role =
     user?.role;
 
@@ -157,7 +219,9 @@ function PendingOrdersPage() {
 
         try {
           const data =
-            await getPendingOrders();
+            await getPendingOrders(
+              queryParams,
+            );
 
           if (
             Array.isArray(
@@ -215,7 +279,7 @@ function PendingOrdersPage() {
           );
         }
       },
-      [],
+      [queryParams],
     );
 
 
@@ -248,6 +312,48 @@ function PendingOrdersPage() {
         selectedOrders,
       ],
     );
+
+
+  function handleApplyFilters(
+    event,
+  ) {
+    event.preventDefault();
+
+    setFilterError(null);
+
+    if (
+      startDate
+      && endDate
+      && startDate > endDate
+    ) {
+      setFilterError(
+        "End date cannot be before start date.",
+      );
+      return;
+    }
+
+    setAppliedFilters({
+      search:
+        String(searchText).trim(),
+      start_date:
+        startDate,
+      end_date:
+        endDate,
+    });
+  }
+
+
+  function handleClearFilters() {
+    setSearchText("");
+    setStartDate("");
+    setEndDate("");
+    setFilterError(null);
+    setAppliedFilters({
+      search: "",
+      start_date: "",
+      end_date: "",
+    });
+  }
 
 
   function handleStartSelection() {
@@ -640,15 +746,19 @@ function PendingOrdersPage() {
       );
 
       setSuccessMessage(
-        (
-          `${orderNumber} was deleted. ` +
-          `${Number(
-            result
-              ?.restored_laptops ??
-              0,
-          )} laptop(s) were restored ` +
-          "to inventory."
-        ),
+        result?.restored_return
+          ? (
+              `${orderNumber} was deleted. `
+              + "The repaired return was restored "
+              + "to Active Returns."
+            )
+          : (
+              `${orderNumber} was deleted. `
+              + `${Number(
+                  result?.restored_laptops ?? 0,
+                )} laptop(s) were restored `
+              + "to inventory."
+            ),
       );
 
       await loadPendingOrders();
@@ -801,6 +911,84 @@ function PendingOrdersPage() {
           </div>
         ) : null}
       </header>
+
+
+      <form
+        className="pending-orders-filter-panel"
+        onSubmit={handleApplyFilters}
+      >
+        <div className="pending-orders-filter-fields">
+          <label className="sale-field pending-orders-search-field">
+            <span>Search</span>
+            <input
+              type="search"
+              value={searchText}
+              placeholder="Order, customer, serial, item..."
+              onChange={(event) =>
+                setSearchText(
+                  event.target.value,
+                )
+              }
+            />
+          </label>
+
+          <label className="sale-field pending-orders-date-field">
+            <span>From</span>
+            <input
+              type="date"
+              value={startDate}
+              max={endDate || undefined}
+              onChange={(event) =>
+                setStartDate(
+                  event.target.value,
+                )
+              }
+            />
+          </label>
+
+          <label className="sale-field pending-orders-date-field">
+            <span>To</span>
+            <input
+              type="date"
+              value={endDate}
+              min={startDate || undefined}
+              onChange={(event) =>
+                setEndDate(
+                  event.target.value,
+                )
+              }
+            />
+          </label>
+        </div>
+
+        <div className="pending-orders-filter-actions">
+          <button
+            type="submit"
+            className="button button-primary"
+            disabled={isLoading || isProcessing}
+          >
+            Apply
+          </button>
+
+          <button
+            type="button"
+            className="button button-secondary"
+            disabled={isLoading || isProcessing}
+            onClick={handleClearFilters}
+          >
+            Clear
+          </button>
+        </div>
+      </form>
+
+      {filterError ? (
+        <div
+          className="sale-draft-error"
+          role="alert"
+        >
+          {filterError}
+        </div>
+      ) : null}
 
 
       <div className="inventory-statistics">
@@ -1018,9 +1206,18 @@ function PendingOrdersPage() {
         message={
           orderToDelete
             ? (
-                `Delete ${orderToDelete.order_number}? ` +
-                "The order will be permanently removed " +
-                "and its laptops will be returned to inventory."
+                orderToDelete.source_return
+                  ? (
+                      `Delete ${orderToDelete.order_number}? `
+                      + "The pending order will be removed "
+                      + "and the laptop will return to "
+                      + "Active Returns at Repair Completed."
+                    )
+                  : (
+                      `Delete ${orderToDelete.order_number}? `
+                      + "The order will be permanently removed "
+                      + "and its laptops will be returned to inventory."
+                    )
               )
             : ""
         }

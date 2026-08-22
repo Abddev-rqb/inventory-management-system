@@ -1,10 +1,20 @@
-import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import {
+  useState,
+} from "react";
+import {
+  useNavigate,
+} from "react-router-dom";
 
-import { useAuth } from "../../auth/AuthContext.jsx";
+import {
+  useAuth,
+} from "../../auth/AuthContext.jsx";
 import ConfirmDialog from "../common/ConfirmDialog.jsx";
 
-function ApplicationHeader() {
+
+function ApplicationHeader({
+  isMobileNavigationOpen = false,
+  onToggleMobileNavigation,
+}) {
   const navigate = useNavigate();
 
   const {
@@ -23,35 +33,71 @@ function ApplicationHeader() {
     permissions,
   });
 
+
   function openLogoutDialog() {
-    setIsLogoutDialogOpen(true);
+    setIsLogoutDialogOpen(
+      true,
+    );
   }
+
 
   function closeLogoutDialog() {
-    setIsLogoutDialogOpen(false);
+    setIsLogoutDialogOpen(
+      false,
+    );
   }
 
+
   function confirmLogout() {
-    setIsLogoutDialogOpen(false);
+    setIsLogoutDialogOpen(
+      false,
+    );
 
     logout();
 
-    navigate("/login", {
-      replace: true,
-    });
+    navigate(
+      "/login",
+      {
+        replace: true,
+      },
+    );
   }
+
 
   return (
     <>
       <header className="application-header">
-        <div className="header-brand">
-          <p className="application-eyebrow">
-            Inventory Management System
-          </p>
+        <div className="header-brand-row">
+          <button
+            type="button"
+            className="mobile-navigation-toggle"
+            aria-label={
+              isMobileNavigationOpen
+                ? "Close navigation menu"
+                : "Open navigation menu"
+            }
+            aria-controls="application-sidebar"
+            aria-expanded={
+              isMobileNavigationOpen
+            }
+            onClick={
+              onToggleMobileNavigation
+            }
+          >
+            <span aria-hidden="true">
+              ☰
+            </span>
+          </button>
 
-          <h1 className="application-title">
-            Istone Technologies
-          </h1>
+          <div className="header-brand">
+            <p className="application-eyebrow">
+              Inventory Management System
+            </p>
+
+            <h1 className="application-title">
+              Inventory Management
+            </h1>
+          </div>
         </div>
 
         <div className="header-account">
@@ -61,7 +107,10 @@ function ApplicationHeader() {
             </span>
 
             <strong className="header-username">
-              {user?.username ?? "Unknown user"}
+              {
+                user?.username
+                ?? "Unknown user"
+              }
             </strong>
 
             <span className="header-role">
@@ -72,7 +121,9 @@ function ApplicationHeader() {
           <button
             type="button"
             className="button button-secondary"
-            onClick={openLogoutDialog}
+            onClick={
+              openLogoutDialog
+            }
           >
             Log out
           </button>
@@ -80,18 +131,30 @@ function ApplicationHeader() {
       </header>
 
       <ConfirmDialog
-        isOpen={isLogoutDialogOpen}
+        isOpen={
+          isLogoutDialogOpen
+        }
         title="Confirm logout"
-        message="Are you sure you want to end your current inventory session?"
+        message={
+          (
+            "Are you sure you want to "
+            + "end your current inventory session?"
+          )
+        }
         confirmLabel="Log out"
         cancelLabel="Stay signed in"
         variant="danger"
-        onConfirm={confirmLogout}
-        onCancel={closeLogoutDialog}
+        onConfirm={
+          confirmLogout
+        }
+        onCancel={
+          closeLogoutDialog
+        }
       />
     </>
   );
 }
+
 
 function getRoleLabel({
   user,
@@ -139,5 +202,6 @@ function getRoleLabel({
 
   return "Limited Access";
 }
+
 
 export default ApplicationHeader;

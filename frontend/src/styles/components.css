@@ -2411,7 +2411,7 @@
 
 .pending-orders-table {
   width: 100%;
-  min-width: 1450px;
+  min-width: 1600px;
   border-collapse: collapse;
   background: #ffffff;
 }
@@ -4269,4 +4269,520 @@ textarea {
   min-height: 2.5rem;
   width: 100%;
   padding: 0.5rem 0.75rem;
+}
+
+/* Return expenses */
+.return-expense-form {
+  max-width: 720px;
+  margin: 0 auto;
+}
+
+.return-expense-laptop-caption {
+  margin: 6px 0 0;
+  color: #667085;
+}
+
+.return-expenses-table {
+  min-width: 1250px;
+}
+
+.return-expense-total-card {
+  display: grid;
+  gap: 4px;
+  min-width: 220px;
+  padding: 14px 18px;
+  border: 1px solid #d9e0e9;
+  border-radius: 12px;
+  background: #ffffff;
+}
+
+.return-expense-total-card span {
+  color: #667085;
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.return-expense-total-card strong {
+  color: #253247;
+  font-size: 1.35rem;
+}
+
+
+/* ---------------------------------------------------------
+   Laptop Inventory date filtering
+   --------------------------------------------------------- */
+.inventory-list-controls {
+  width: 100%;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.inventory-date-filter-panel {
+  display: flex;
+  flex: 1 1 520px;
+  min-width: 0;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.inventory-date-filters {
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.inventory-date-field {
+  display: grid;
+  min-width: 160px;
+  gap: 6px;
+}
+
+.inventory-date-field span {
+  color: #59677a;
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.inventory-date-field input {
+  min-height: 42px;
+  padding: 8px 10px;
+  border: 1px solid #bbc5d2;
+  border-radius: 8px;
+  color: #253247;
+  background: #ffffff;
+  font: inherit;
+}
+
+.inventory-date-field input:focus {
+  border-color: #2458a6;
+  outline: 2px solid rgb(36 88 166 / 14%);
+  outline-offset: 1px;
+}
+
+.inventory-date-filter-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.inventory-date-filter-error {
+  margin: 0;
+  color: #b42318;
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+
+@media (max-width: 900px) {
+  .inventory-list-controls {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .inventory-date-filter-panel,
+  .inventory-date-filters {
+    width: 100%;
+  }
+
+  .inventory-date-field {
+    flex: 1 1 180px;
+  }
+}
+
+@media (max-width: 560px) {
+  .inventory-date-filters {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .inventory-date-field,
+  .inventory-date-field input,
+  .inventory-date-filter-actions,
+  .inventory-date-filter-actions .button {
+    width: 100%;
+  }
+
+  .inventory-date-filter-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+/* ---------------------------------------------------------
+   Laptop Inventory - Move to Service dialog
+   --------------------------------------------------------- */
+.to-service-dialog {
+  width: min(640px, calc(100% - 32px));
+  max-height: calc(100vh - 32px);
+  padding: 0;
+  border: 0;
+  border-radius: 16px;
+  background: transparent;
+  overflow: hidden;
+}
+
+.to-service-dialog::backdrop {
+  background: rgb(17 24 39 / 62%);
+  backdrop-filter: blur(3px);
+}
+
+.to-service-dialog-card {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  width: 100%;
+  max-height: calc(100vh - 32px);
+  overflow: hidden;
+  border: 1px solid #d8dee8;
+  border-radius: 16px;
+  background: #ffffff;
+  box-shadow: 0 24px 70px rgb(15 23 42 / 28%);
+}
+
+.to-service-dialog-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 22px 24px;
+  border-bottom: 1px solid #e4e7ec;
+  background: #ffffff;
+}
+
+.to-service-dialog-header h2 {
+  margin: 2px 0 0;
+  color: #1f2937;
+  font-size: 1.25rem;
+}
+
+.to-service-dialog-header p:last-child {
+  margin: 8px 0 0;
+  color: #667085;
+  line-height: 1.5;
+}
+
+.to-service-dialog-close {
+  display: grid;
+  width: 36px;
+  height: 36px;
+  flex: 0 0 36px;
+  place-items: center;
+  padding: 0;
+  border: 1px solid #d0d5dd;
+  border-radius: 8px;
+  color: #475467;
+  background: #ffffff;
+  font: inherit;
+  font-size: 1.35rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.to-service-dialog-close:hover:not(:disabled) {
+  border-color: #98a2b3;
+  background: #f9fafb;
+}
+
+.to-service-dialog-close:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.to-service-dialog-body {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 24px;
+  background: #ffffff;
+}
+
+.to-service-field {
+  display: grid;
+  align-content: start;
+  gap: 7px;
+  min-width: 0;
+}
+
+.to-service-field-full {
+  grid-column: 1 / -1;
+}
+
+.to-service-field > span {
+  color: #475467;
+  font-size: 0.84rem;
+  font-weight: 700;
+}
+
+.to-service-field input,
+.to-service-field select,
+.to-service-field textarea {
+  width: 100%;
+  min-height: 42px;
+  padding: 9px 11px;
+  border: 1px solid #cfd7e3;
+  border-radius: 8px;
+  color: #253247;
+  background: #ffffff;
+  font: inherit;
+  transition: border-color 120ms ease, box-shadow 120ms ease;
+}
+
+.to-service-field textarea {
+  min-height: 110px;
+  resize: vertical;
+  line-height: 1.5;
+}
+
+.to-service-field input:focus,
+.to-service-field select:focus,
+.to-service-field textarea:focus {
+  border-color: #2458a6;
+  outline: 0;
+  box-shadow: 0 0 0 3px rgb(36 88 166 / 12%);
+}
+
+.to-service-field input:disabled,
+.to-service-field select:disabled,
+.to-service-field textarea:disabled {
+  cursor: not-allowed;
+  color: #667085;
+  background: #f2f4f7;
+}
+
+.to-service-dialog-body .sale-draft-error {
+  grid-column: 1 / -1;
+  margin: 0;
+}
+
+.to-service-dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 18px 24px;
+  border-top: 1px solid #e4e7ec;
+  background: #ffffff;
+}
+
+@media (max-width: 700px) {
+  .to-service-dialog {
+    width: calc(100% - 16px);
+    max-height: calc(100vh - 16px);
+  }
+
+  .to-service-dialog-card {
+    max-height: calc(100vh - 16px);
+  }
+
+  .to-service-dialog-header,
+  .to-service-dialog-body,
+  .to-service-dialog-actions {
+    padding-left: 18px;
+    padding-right: 18px;
+  }
+
+  .to-service-dialog-body {
+    grid-template-columns: 1fr;
+  }
+
+  .to-service-field-full {
+    grid-column: auto;
+  }
+
+  .to-service-dialog-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .to-service-dialog-actions .button {
+    width: 100%;
+  }
+}
+
+@media (max-width: 460px) {
+  .to-service-dialog-actions {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* =========================================================
+   Implementation 19 - inventory bulk operations
+   ========================================================= */
+
+.inventory-action-dropdown-danger {
+  color: #b91c1c;
+}
+
+.inventory-action-dropdown-danger:hover {
+  background: #fef2f2;
+}
+
+.inventory-bulk-delete-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+}
+
+.bulk-update-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.bulk-update-preview-table {
+  width: 100%;
+  min-width: 800px;
+  border-collapse: collapse;
+  background: #ffffff;
+}
+
+.bulk-update-preview-table th,
+.bulk-update-preview-table td {
+  padding: 0.8rem 0.9rem;
+  border-bottom: 1px solid #e5e7eb;
+  text-align: left;
+  vertical-align: top;
+}
+
+.bulk-update-preview-table th {
+  background: #f8fafc;
+  color: #4b5563;
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.bulk-update-change-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  min-width: 360px;
+}
+
+.bulk-update-change-list span {
+  white-space: normal;
+}
+
+.bulk-update-errors {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 1rem;
+  border: 1px solid #fecaca;
+  border-radius: 0.75rem;
+  background: #fff7f7;
+}
+
+.bulk-update-errors h3 {
+  margin: 0;
+}
+
+.bulk-update-error-row {
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid #fecaca;
+}
+
+.bulk-update-error-row:last-child {
+  padding-bottom: 0;
+  border-bottom: 0;
+}
+
+.bulk-update-error-row ul {
+  margin: 0.4rem 0 0;
+  padding-left: 1.25rem;
+}
+
+.total-sales-serial-numbers {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  min-width: 150px;
+}
+
+.total-sales-serial-numbers span {
+  white-space: nowrap;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
+    "Liberation Mono", "Courier New", monospace;
+}
+
+
+/* =========================================================
+   Pending orders filters
+   ========================================================= */
+
+.pending-orders-filter-panel {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 1rem;
+  padding: 1rem;
+  border: 1px solid #e5e7eb;
+  border-radius: 0.75rem;
+  background: #ffffff;
+}
+
+.pending-orders-filter-fields {
+  display: flex;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.pending-orders-search-field {
+  min-width: 280px;
+}
+
+.pending-orders-date-field {
+  min-width: 180px;
+}
+
+.pending-orders-filter-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+}
+
+.sales-search-field {
+  min-width: 280px;
+}
+
+@media (max-width: 700px) {
+  .pending-orders-filter-panel {
+    align-items: stretch;
+  }
+
+  .pending-orders-filter-fields,
+  .pending-orders-filter-actions {
+    width: 100%;
+  }
+
+  .pending-orders-search-field {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .pending-orders-date-field {
+    flex: 1;
+    min-width: 140px;
+  }
+
+  .sales-search-field {
+    width: 100%;
+    min-width: 0;
+  }
+}
+
+@media (max-width: 480px) {
+  .pending-orders-date-field {
+    width: 100%;
+  }
+
+  .pending-orders-filter-actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
 }

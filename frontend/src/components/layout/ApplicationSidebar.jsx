@@ -7,7 +7,9 @@ import {
 } from "../../auth/AuthContext.jsx";
 
 
-function ApplicationSidebar() {
+function ApplicationSidebar({
+  onNavigate,
+}) {
   const {
     user,
     hasPermission,
@@ -69,6 +71,9 @@ function ApplicationSidebar() {
           className={
             getNavigationClassName
           }
+          onClick={
+            onNavigate
+          }
         >
           Laptop Inventory
         </NavLink>
@@ -86,6 +91,9 @@ function ApplicationSidebar() {
             className={
               getNavigationClassName
             }
+            onClick={
+              onNavigate
+            }
           >
             Pending Orders
           </NavLink>
@@ -96,6 +104,9 @@ function ApplicationSidebar() {
               to="/orders/dispatched"
               className={
                 getNavigationClassName
+              }
+              onClick={
+                onNavigate
               }
             >
               Dispatched
@@ -108,6 +119,9 @@ function ApplicationSidebar() {
               to="/orders/sales"
               className={
                 getNavigationClassName
+              }
+              onClick={
+                onNavigate
               }
             >
               Total Sales
@@ -128,6 +142,9 @@ function ApplicationSidebar() {
             className={
               getNavigationClassName
             }
+            onClick={
+              onNavigate
+            }
           >
             Users
           </NavLink>
@@ -143,6 +160,9 @@ function ApplicationSidebar() {
           to="/returns"
           className={
             getNavigationClassName
+          }
+          onClick={
+            onNavigate
           }
         >
           Returns

@@ -12,6 +12,9 @@ function getInitialForm(
     customer_name:
       returnRecord?.customer_name || "",
 
+    customer_address:
+      returnRecord?.customer_address || "",
+
     company:
       returnRecord?.company || "",
 
@@ -196,6 +199,20 @@ function ReturnEditDialog({
               <input
                 name="customer_name"
                 value={form.customer_name}
+                onChange={handleChange}
+                required
+              />
+            </Field>
+
+
+            <Field
+              label="Customer Address"
+              fullWidth
+            >
+              <textarea
+                rows="3"
+                name="customer_address"
+                value={form.customer_address}
                 onChange={handleChange}
                 required
               />

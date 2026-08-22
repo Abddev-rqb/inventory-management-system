@@ -12,8 +12,11 @@ import {
 } from "react-router-dom";
 
 import {
+  bulkDeleteLaptops,
   exportLaptops,
   getLaptops,
+  getServiceTechnicians,
+  moveLaptopToService,
 } from "../api/laptopApi.js";
 
 import {
@@ -25,6 +28,7 @@ import {
 } from "../auth/AuthContext.jsx";
 
 import AlertMessage from "../components/common/AlertMessage.jsx";
+import ConfirmDialog from "../components/common/ConfirmDialog.jsx";
 import EmptyState from "../components/common/EmptyState.jsx";
 import LoadingState from "../components/common/LoadingState.jsx";
 import Pagination from "../components/common/Pagination.jsx";
@@ -32,6 +36,7 @@ import Pagination from "../components/common/Pagination.jsx";
 import InventoryActions from "../components/laptops/InventoryActions.jsx";
 import LaptopListToolbar from "../components/laptops/LaptopListToolbar.jsx";
 import LaptopTable from "../components/laptops/LaptopTable.jsx";
+import ToServiceDialog from "../components/laptops/ToServiceDialog.jsx";
 
 import PriceModeDialog from "../components/orders/PriceModeDialog.jsx";
 import SelectedProductsDialog from "../components/orders/SelectedProductsDialog.jsx";
@@ -161,6 +166,91 @@ function LaptopListPage() {
     setExportError,
   ] = useState(null);
 
+  // Draft values are what the user is currently typing.
+  // Applied values are the dates currently sent to Django.
+  // Keeping them separate prevents a request on every change.
+  const [
+    dateFromInput,
+    setDateFromInput,
+  ] = useState("");
+
+  const [
+    dateToInput,
+    setDateToInput,
+  ] = useState("");
+
+  const [
+    createdFrom,
+    setCreatedFrom,
+  ] = useState("");
+
+  const [
+    createdTo,
+    setCreatedTo,
+  ] = useState("");
+
+  const [
+    dateFilterError,
+    setDateFilterError,
+  ] = useState("");
+
+  const [
+    serviceLaptop,
+    setServiceLaptop,
+  ] = useState(null);
+
+  const [
+    technicians,
+    setTechnicians,
+  ] = useState([]);
+
+  const [
+    isMovingToService,
+    setIsMovingToService,
+  ] = useState(false);
+
+  const [
+    serviceError,
+    setServiceError,
+  ] = useState(null);
+
+  const [
+    serviceSuccessMessage,
+    setServiceSuccessMessage,
+  ] = useState(null);
+
+  const [
+    isBulkDeleteMode,
+    setIsBulkDeleteMode,
+  ] = useState(false);
+
+  const [
+    selectedDeleteLaptops,
+    setSelectedDeleteLaptops,
+  ] = useState(
+    () => new Map(),
+  );
+
+  const [
+    isBulkDeleteDialogOpen,
+    setIsBulkDeleteDialogOpen,
+  ] = useState(false);
+
+  const [
+    isBulkDeleting,
+    setIsBulkDeleting,
+  ] = useState(false);
+
+  const [
+    bulkDeleteError,
+    setBulkDeleteError,
+  ] = useState(null);
+
+  const [
+    bulkDeleteSuccess,
+    setBulkDeleteSuccess,
+  ] = useState(null);
+
   const [
     successTitle,
   ] = useState(
@@ -197,6 +287,16 @@ function LaptopListPage() {
     hasPermission(
       "inventory.add_order",
     );
+
+  const canMoveToService =
+    hasPermission(
+      "inventory.change_laptop",
+    )
+    && (isAdmin || isSales);
+
+  const canBulkManage =
+    isAdmin ||
+    isSales;
 
 
   const page =
@@ -265,6 +365,10 @@ function LaptopListPage() {
               searchTerms,
 
               ordering,
+
+              createdFrom,
+
+              createdTo,
             });
 
           setLaptops(
@@ -324,6 +428,8 @@ function LaptopListPage() {
         page,
         ordering,
         searchTerms,
+        createdFrom,
+        createdTo,
       ],
     );
 
@@ -523,6 +629,38 @@ function LaptopListPage() {
         laptop,
       )
     ) {
+      return;
+    }
+
+    if (
+      isBulkDeleteMode
+    ) {
+      setSelectedDeleteLaptops(
+        (currentSelection) => {
+          const nextSelection =
+            new Map(
+              currentSelection,
+            );
+
+          if (
+            nextSelection.has(
+              laptopId,
+            )
+          ) {
+            nextSelection.delete(
+              laptopId,
+            );
+          } else {
+            nextSelection.set(
+              laptopId,
+              laptop,
+            );
+          }
+
+          return nextSelection;
+        },
+      );
+
       return;
     }
 
@@ -726,9 +864,66 @@ function LaptopListPage() {
         ordering;
     }
 
+    if (createdFrom) {
+      queryParameters.created_from =
+        createdFrom;
+    }
+
+    if (createdTo) {
+      queryParameters.created_to =
+        createdTo;
+    }
+
     return queryParameters;
   }
 
+
+
+
+  function handleApplyDateFilter() {
+    if (
+      dateFromInput &&
+      dateToInput &&
+      dateFromInput > dateToInput
+    ) {
+      setDateFilterError(
+        "To date cannot be earlier than From date.",
+      );
+
+      return;
+    }
+
+    setDateFilterError("");
+    setCreatedFrom(dateFromInput);
+    setCreatedTo(dateToInput);
+
+    if (page !== 1) {
+      updateUrlState({
+        page: 1,
+        searchTerms,
+        ordering,
+        setSearchParams,
+      });
+    }
+  }
+
+
+  function handleClearDateFilter() {
+    setDateFilterError("");
+    setDateFromInput("");
+    setDateToInput("");
+    setCreatedFrom("");
+    setCreatedTo("");
+
+    if (page !== 1) {
+      updateUrlState({
+        page: 1,
+        searchTerms,
+        ordering,
+        setSearchParams,
+      });
+    }
+  }
 
   async function handleExportLaptops() {
     if (
@@ -943,28 +1138,190 @@ function LaptopListPage() {
   }
 
 
+  async function handleOpenToService(
+    laptop,
+  ) {
+    if (
+      !canMoveToService
+      || isMovingToService
+    ) {
+      return;
+    }
+
+    setServiceError(null);
+    setServiceSuccessMessage(null);
+    setServiceLaptop(laptop);
+
+    try {
+      const data =
+        await getServiceTechnicians();
+
+      setTechnicians(data);
+    } catch (error) {
+      const parsed =
+        parseApiError(error);
+
+      setServiceError(
+        parsed.message,
+      );
+    }
+  }
+
+
+  async function handleSubmitToService(
+    payload,
+  ) {
+    if (
+      !serviceLaptop
+      || !canMoveToService
+      || isMovingToService
+    ) {
+      return;
+    }
+
+    setIsMovingToService(true);
+    setServiceError(null);
+    setServiceSuccessMessage(null);
+
+    try {
+      const result =
+        await moveLaptopToService(
+          serviceLaptop.id,
+          payload,
+        );
+
+      setServiceLaptop(null);
+      setServiceSuccessMessage(
+        result?.message
+        || "Laptop moved to service successfully.",
+      );
+
+      await loadLaptops();
+    } catch (error) {
+      const parsed =
+        parseApiError(error);
+
+      setServiceError(
+        parsed.message,
+      );
+    } finally {
+      setIsMovingToService(false);
+    }
+  }
+
+
+  function handleStartBulkDelete() {
+    if (
+      !canBulkManage ||
+      isBulkDeleteMode
+    ) {
+      return;
+    }
+
+    handleCancelSelection();
+    setSelectedDeleteLaptops(
+      new Map(),
+    );
+    setBulkDeleteError(null);
+    setBulkDeleteSuccess(null);
+    setIsBulkDeleteMode(true);
+  }
+
+
+  function handleCancelBulkDelete() {
+    if (isBulkDeleting) {
+      return;
+    }
+
+    setIsBulkDeleteDialogOpen(false);
+    setSelectedDeleteLaptops(
+      new Map(),
+    );
+    setBulkDeleteError(null);
+    setIsBulkDeleteMode(false);
+  }
+
+
+  async function handleConfirmBulkDelete() {
+    if (
+      !canBulkManage ||
+      isBulkDeleting ||
+      selectedDeleteLaptops.size === 0
+    ) {
+      return;
+    }
+
+    setIsBulkDeleting(true);
+    setBulkDeleteError(null);
+    setBulkDeleteSuccess(null);
+
+    try {
+      const result =
+        await bulkDeleteLaptops(
+          Array.from(
+            selectedDeleteLaptops.keys(),
+          ),
+        );
+
+      setIsBulkDeleteDialogOpen(false);
+      setSelectedDeleteLaptops(
+        new Map(),
+      );
+      setIsBulkDeleteMode(false);
+      setBulkDeleteSuccess(
+        result?.message ||
+        "Selected laptops were deleted successfully.",
+      );
+
+      await loadLaptops();
+    } catch (error) {
+      const parsed =
+        parseApiError(error);
+
+      setBulkDeleteError(
+        parsed.message,
+      );
+    } finally {
+      setIsBulkDeleting(false);
+    }
+  }
+
+
   const hasActiveSearch =
     searchTerms.length >
-    0;
+      0
+    || Boolean(createdFrom)
+    || Boolean(createdTo);
 
-  const isSelectionMode =
+  const isSaleSelectionMode =
     priceMode !==
     null;
+
+  const isSelectionMode =
+    isSaleSelectionMode ||
+    isBulkDeleteMode;
 
   const selectedLaptopIds =
     useMemo(
       () =>
         new Set(
-          selectedLaptops
-            .keys(),
+          (
+            isBulkDeleteMode
+              ? selectedDeleteLaptops
+              : selectedLaptops
+          ).keys(),
         ),
       [
+        isBulkDeleteMode,
+        selectedDeleteLaptops,
         selectedLaptops,
       ],
     );
 
   const selectedCount =
-    selectedLaptops.size;
+    isBulkDeleteMode
+      ? selectedDeleteLaptops.size
+      : selectedLaptops.size;
 
   const selectedPriceModeLabel =
     priceMode ===
@@ -1000,6 +1357,12 @@ function LaptopListPage() {
             canExportLaptops={
               canExportLaptops
             }
+            canBulkManage={
+              canBulkManage
+            }
+            onStartBulkDelete={
+              handleStartBulkDelete
+            }
             isExporting={
               isExporting
             }
@@ -1008,8 +1371,33 @@ function LaptopListPage() {
             }
           />
 
-          {canCreateOrder ? (
-            isSelectionMode ? (
+          {isBulkDeleteMode ? (
+            <div className="inventory-bulk-delete-actions">
+              <button
+                type="button"
+                className="button button-secondary"
+                disabled={isBulkDeleting}
+                onClick={handleCancelBulkDelete}
+              >
+                Cancel bulk delete
+              </button>
+
+              <button
+                type="button"
+                className="button button-danger"
+                disabled={
+                  selectedDeleteLaptops.size === 0 ||
+                  isBulkDeleting
+                }
+                onClick={() =>
+                  setIsBulkDeleteDialogOpen(true)
+                }
+              >
+                Delete Selected ({selectedDeleteLaptops.size})
+              </button>
+            </div>
+          ) : canCreateOrder ? (
+            isSaleSelectionMode ? (
               <button
                 type="button"
                 className="button button-secondary"
@@ -1049,8 +1437,20 @@ function LaptopListPage() {
         ) : null}
 
 
+        {isBulkDeleteMode ? (
+          <article className="statistic-card statistic-card-selected">
+            <span className="statistic-label">
+              Selected for deletion
+            </span>
+            <strong className="statistic-value">
+              {selectedDeleteLaptops.size}
+            </strong>
+          </article>
+        ) : null}
+
+
         {canCreateOrder &&
-        isSelectionMode ? (
+        isSaleSelectionMode ? (
           <button
             type="button"
             className={
@@ -1086,7 +1486,7 @@ function LaptopListPage() {
 
 
         {canCreateOrder &&
-        isSelectionMode ? (
+        isSaleSelectionMode ? (
           <article className="statistic-card">
             <span className="statistic-label">
               Price mode
@@ -1110,6 +1510,87 @@ function LaptopListPage() {
 
 
       <div className="inventory-list-controls">
+        <div className="inventory-date-filter-panel">
+          <div className="inventory-date-filters">
+            <label className="inventory-date-field">
+              <span>From date</span>
+
+              <input
+                type="date"
+                value={dateFromInput}
+                max={dateToInput || undefined}
+                disabled={isLoading}
+                onChange={(event) => {
+                  setDateFilterError("");
+                  setDateFromInput(
+                    event.target.value,
+                  );
+                }}
+              />
+            </label>
+
+            <label className="inventory-date-field">
+              <span>To date</span>
+
+              <input
+                type="date"
+                value={dateToInput}
+                min={dateFromInput || undefined}
+                disabled={isLoading}
+                onChange={(event) => {
+                  setDateFilterError("");
+                  setDateToInput(
+                    event.target.value,
+                  );
+                }}
+              />
+            </label>
+
+            <div className="inventory-date-filter-actions">
+              <button
+                type="button"
+                className="button button-primary"
+                disabled={
+                  isLoading ||
+                  (
+                    !dateFromInput &&
+                    !dateToInput
+                  )
+                }
+                onClick={handleApplyDateFilter}
+              >
+                Apply
+              </button>
+
+              <button
+                type="button"
+                className="button button-secondary"
+                disabled={
+                  isLoading ||
+                  (
+                    !dateFromInput &&
+                    !dateToInput &&
+                    !createdFrom &&
+                    !createdTo
+                  )
+                }
+                onClick={handleClearDateFilter}
+              >
+                Clear
+              </button>
+            </div>
+          </div>
+
+          {dateFilterError ? (
+            <p
+              className="inventory-date-filter-error"
+              role="alert"
+            >
+              {dateFilterError}
+            </p>
+          ) : null}
+        </div>
+
         <LaptopListToolbar
           searchTerms={
             searchTerms
@@ -1145,6 +1626,36 @@ function LaptopListPage() {
           message={
             successMessage
           }
+        />
+      ) : null}
+
+
+      {serviceSuccessMessage ? (
+        <AlertMessage
+          variant="success"
+          title="Laptop moved to service"
+          message={
+            serviceSuccessMessage
+          }
+        />
+      ) : null}
+
+
+      {bulkDeleteSuccess ? (
+        <AlertMessage
+          variant="success"
+          title="Bulk delete completed"
+          message={bulkDeleteSuccess}
+        />
+      ) : null}
+
+
+      {bulkDeleteError &&
+      !isBulkDeleteDialogOpen ? (
+        <AlertMessage
+          variant="error"
+          title="Bulk delete failed"
+          message={bulkDeleteError}
         />
       ) : null}
 
@@ -1243,7 +1754,6 @@ function LaptopListPage() {
               laptops
             }
             isSelectionMode={
-              canCreateOrder &&
               isSelectionMode
             }
             selectedLaptopIds={
@@ -1251,6 +1761,17 @@ function LaptopListPage() {
             }
             onToggleLaptop={
               handleToggleLaptop
+            }
+            canMoveToService={
+              canMoveToService
+            }
+            movingLaptopId={
+              isMovingToService
+                ? serviceLaptop?.id
+                : null
+            }
+            onMoveToService={
+              handleOpenToService
             }
           />
 
@@ -1282,6 +1803,62 @@ function LaptopListPage() {
           />
         </div>
       ) : null}
+
+
+      <ConfirmDialog
+        isOpen={
+          isBulkDeleteDialogOpen
+        }
+        title="Delete selected laptops?"
+        message={
+          selectedDeleteLaptops.size > 0
+            ? (
+                `Permanently delete ${selectedDeleteLaptops.size} selected laptop` +
+                `${selectedDeleteLaptops.size === 1 ? "" : "s"}? ` +
+                "The operation is cancelled if any selected laptop has sales/service history or is not currently in stock."
+              )
+            : "Select at least one laptop."
+        }
+        confirmLabel="Delete selected"
+        cancelLabel="Cancel"
+        variant="danger"
+        isProcessing={isBulkDeleting}
+        onConfirm={handleConfirmBulkDelete}
+        onCancel={() => {
+          if (!isBulkDeleting) {
+            setIsBulkDeleteDialogOpen(false);
+            setBulkDeleteError(null);
+          }
+        }}
+      />
+
+
+      <ToServiceDialog
+        isOpen={
+          Boolean(serviceLaptop)
+        }
+        laptop={
+          serviceLaptop
+        }
+        technicians={
+          technicians
+        }
+        isSubmitting={
+          isMovingToService
+        }
+        errorMessage={
+          serviceError
+        }
+        onClose={() => {
+          if (!isMovingToService) {
+            setServiceLaptop(null);
+            setServiceError(null);
+          }
+        }}
+        onSubmit={
+          handleSubmitToService
+        }
+      />
 
 
       {canCreateOrder ? (

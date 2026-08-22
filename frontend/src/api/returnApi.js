@@ -197,3 +197,43 @@ export async function updateReturn(
 
   return response.data;
 }
+
+export async function createReturnExpense(
+  returnId,
+  payload,
+) {
+  const response =
+    await axiosClient.post(
+      `/returns/${returnId}/expenses/`,
+      payload,
+    );
+
+  return response.data;
+}
+
+
+export async function getReturnExpenses(
+  params = {},
+) {
+  const response =
+    await axiosClient.get(
+      "/returns/expenses/",
+      { params },
+    );
+
+  return response.data;
+}
+
+
+
+export async function completeReturnRepair(
+  returnId,
+) {
+  const response =
+    await axiosClient.post(
+      `/returns/${returnId}/done/`,
+      {},
+    );
+
+  return response.data;
+}

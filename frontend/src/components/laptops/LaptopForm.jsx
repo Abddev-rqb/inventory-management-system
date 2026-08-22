@@ -598,10 +598,6 @@ function LaptopForm({
               In Stock G
             </option>
 
-            <option value="in_service">
-              In Service
-            </option>
-
             <option value="sold">
               Sold
             </option>

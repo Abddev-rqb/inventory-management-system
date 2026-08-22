@@ -333,8 +333,8 @@ function LoginPage() {
           </h1>
 
           <p>
-            Use your inventory account to
-            access laptop records.
+            Use your account to
+            access inventory records.
           </p>
         </div>
 

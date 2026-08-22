@@ -9,10 +9,13 @@ import {
   assignReturnPriority,
   assignReturnTechnician,
   confirmReturnImport,
+  completeReturnRepair,
   createReturn,
+  createReturnExpense,
   exportReturns,
   exportStockedInReturns,
   getReturns,
+  getReturnExpenses,
   getReturnTechnicians,
   getStockedInReturns,
   previewReturnImport,
@@ -81,6 +84,15 @@ import ReturnImportExportMenu
 import ReturnEditDialog
   from "../../components/returns/ReturnEditDialog.jsx";
 
+import ReturnExpenseDialog
+  from "../../components/returns/ReturnExpenseDialog.jsx";
+
+import ReturnExpensesFilters
+  from "../../components/returns/ReturnExpensesFilters.jsx";
+
+import ReturnExpensesTable
+  from "../../components/returns/ReturnExpensesTable.jsx";
+
 const EMPTY_FILTERS = {
   search: "",
   technician: "",
@@ -99,7 +111,82 @@ const EMPTY_STOCKED_IN_FILTERS = {
 };
 
 
+const EMPTY_EXPENSE_FILTERS = {
+  search: "",
+  start_date: "",
+  end_date: "",
+};
+
+
 const PAGE_SIZE = 25;
+
+function getReturnImportErrorMessage(
+  error,
+) {
+  const data =
+    error?.response?.data;
+
+  const rowErrors =
+    Array.isArray(
+      data?.errors,
+    )
+      ? data.errors
+      : [];
+
+  if (rowErrors.length > 0) {
+    const firstRow =
+      rowErrors[0];
+
+    const firstError =
+      Array.isArray(
+        firstRow?.errors,
+      )
+        ? firstRow.errors[0]
+        : null;
+
+    if (
+      firstError?.message
+    ) {
+      const field =
+        firstError.field
+          ? (
+              ` (${firstError.field})`
+            )
+          : "";
+
+      const remaining =
+        rowErrors.length - 1;
+
+      return (
+        `Row ${firstRow.row_number}`
+        + `${field}: `
+        + firstError.message
+        + (
+          remaining > 0
+            ? (
+                ` + ${remaining} more `
+                + "invalid row"
+                + (
+                  remaining === 1
+                    ? ""
+                    : "s"
+                )
+                + "."
+              )
+            : ""
+        )
+      );
+    }
+  }
+
+  return (
+    data?.detail
+    ||
+    data?.message
+    ||
+    "Return import failed."
+  );
+}
 
 function ReturnsPage() {
   const {
@@ -330,6 +417,91 @@ function ReturnsPage() {
     isEditing,
     setIsEditing,
   ] = useState(false);
+
+  const [
+    completingReturnId,
+    setCompletingReturnId,
+  ] = useState(null);
+
+  const [
+    doneError,
+    setDoneError,
+  ] = useState(null);
+
+
+  const [
+    expenseReturn,
+    setExpenseReturn,
+  ] = useState(null);
+
+  const [
+    expenseError,
+    setExpenseError,
+  ] = useState(null);
+
+  const [
+    isAddingExpense,
+    setIsAddingExpense,
+  ] = useState(false);
+
+  const [
+    expenseFilters,
+    setExpenseFilters,
+  ] = useState(
+    EMPTY_EXPENSE_FILTERS,
+  );
+
+  const [
+    appliedExpenseFilters,
+    setAppliedExpenseFilters,
+  ] = useState(
+    EMPTY_EXPENSE_FILTERS,
+  );
+
+  const [
+    expenses,
+    setExpenses,
+  ] = useState([]);
+
+  const [
+    expenseCount,
+    setExpenseCount,
+  ] = useState(0);
+
+  const [
+    expenseTotal,
+    setExpenseTotal,
+  ] = useState("0.00");
+
+  const [
+    expensePage,
+    setExpensePage,
+  ] = useState(1);
+
+  const [
+    expenseHasNext,
+    setExpenseHasNext,
+  ] = useState(false);
+
+  const [
+    expenseHasPrevious,
+    setExpenseHasPrevious,
+  ] = useState(false);
+
+  const [
+    expensesLoading,
+    setExpensesLoading,
+  ] = useState(false);
+
+  const [
+    expensesError,
+    setExpensesError,
+  ] = useState(null);
+
+  const [
+    expenseFilterError,
+    setExpenseFilterError,
+  ] = useState(null);
   
   const role =
     String(
@@ -371,7 +543,9 @@ function ReturnsPage() {
     !isInventoryViewer;
 
   const canActuallyAssignPriority =
-    isAdmin;
+    isAdmin
+    ||
+    isSales;
 
   const canAssignTechnician =
     isAdmin
@@ -382,6 +556,18 @@ function ReturnsPage() {
     canAddReturn;
 
   const canEditReturn =
+    isAdmin
+    ||
+    isSales;
+
+
+  const canAddExpense =
+    isAdmin
+    ||
+    isSales;
+
+
+  const canCompleteReturn =
     isAdmin
     ||
     isSales;
@@ -547,6 +733,131 @@ function ReturnsPage() {
       Math.ceil(
         stockedInCount /
         PAGE_SIZE,
+      ),
+    );
+
+
+  const expenseQueryParams =
+    useMemo(
+      () => {
+        const params = {
+          page:
+            expensePage,
+        };
+
+        const search =
+          String(
+            appliedExpenseFilters
+              .search ?? "",
+          )
+            .trim();
+
+        if (search) {
+          params.search =
+            search;
+        }
+
+        if (
+          appliedExpenseFilters
+            .start_date
+        ) {
+          params.start_date =
+            appliedExpenseFilters
+              .start_date;
+        }
+
+        if (
+          appliedExpenseFilters
+            .end_date
+        ) {
+          params.end_date =
+            appliedExpenseFilters
+              .end_date;
+        }
+
+        return params;
+      },
+      [
+        appliedExpenseFilters,
+        expensePage,
+      ],
+    );
+
+  const loadExpenses =
+    useCallback(
+      async () => {
+        setExpensesLoading(true);
+        setExpensesError(null);
+
+        try {
+          const data =
+            await getReturnExpenses(
+              expenseQueryParams,
+            );
+
+          const results =
+            Array.isArray(data)
+              ? data
+              : (
+                  Array.isArray(
+                    data?.results,
+                  )
+                    ? data.results
+                    : []
+                );
+
+          setExpenses(results);
+          setExpenseCount(
+            Number(
+              data?.count
+              ?? results.length,
+            ),
+          );
+          setExpenseTotal(
+            String(
+              data?.summary
+                ?.total_expenses
+              ?? "0.00",
+            ),
+          );
+          setExpenseHasNext(
+            Boolean(data?.next),
+          );
+          setExpenseHasPrevious(
+            Boolean(data?.previous),
+          );
+        } catch (error) {
+          const parsed =
+            parseApiError(error);
+
+          setExpensesError(
+            parsed.message,
+          );
+          setExpenses([]);
+          setExpenseCount(0);
+          setExpenseTotal("0.00");
+          setExpenseHasNext(false);
+          setExpenseHasPrevious(false);
+        } finally {
+          setExpensesLoading(false);
+        }
+      },
+      [expenseQueryParams],
+    );
+
+  useEffect(() => {
+    if (activeTab !== "expenses") {
+      return;
+    }
+
+    loadExpenses();
+  }, [activeTab, loadExpenses]);
+
+  const expenseTotalPages =
+    Math.max(
+      1,
+      Math.ceil(
+        expenseCount / PAGE_SIZE,
       ),
     );
 
@@ -1037,6 +1348,66 @@ function ReturnsPage() {
   }
 
 
+  async function handleDoneReturn(
+    returnRecord,
+  ) {
+    if (
+      !canCompleteReturn
+      || returnRecord.status
+        !== "repair_completed"
+      || completingReturnId
+        !== null
+    ) {
+      return;
+    }
+
+    setCompletingReturnId(
+      returnRecord.id,
+    );
+    setDoneError(null);
+    setSuccessMessage(null);
+
+    try {
+      const result =
+        await completeReturnRepair(
+          returnRecord.id,
+        );
+
+      if (
+        selectedReturn?.id
+        === returnRecord.id
+      ) {
+        setSelectedReturn(null);
+      }
+
+      setSuccessMessage(
+        result?.order_number
+          ? (
+              `${result.order_number} created. `
+              + "Return moved to Pending Orders."
+            )
+          : (
+              result?.message
+              || (
+                "Serviced inventory laptop "
+                + "returned to stock."
+              )
+            ),
+      );
+
+      await loadReturns();
+    } catch (error) {
+      const parsed =
+        parseApiError(error);
+
+      setDoneError(
+        parsed.message,
+      );
+    } finally {
+      setCompletingReturnId(null);
+    }
+  }
+
   function handleOpenTechnician(
     returnRecord,
   ) {
@@ -1436,6 +1807,161 @@ function ReturnsPage() {
     });
   }
 
+  function handleOpenExpense(
+    returnRecord,
+  ) {
+    setExpenseError(null);
+    setExpenseReturn(
+      returnRecord,
+    );
+  }
+
+
+  async function handleExpenseSubmit(
+    payload,
+  ) {
+    if (
+      !expenseReturn
+      || isAddingExpense
+    ) {
+      return;
+    }
+
+    setIsAddingExpense(true);
+    setExpenseError(null);
+
+    try {
+      await createReturnExpense(
+        expenseReturn.id,
+        payload,
+      );
+
+      setExpenseReturn(null);
+      setSuccessMessage(
+        "Expense added successfully.",
+      );
+
+      if (activeTab === "expenses") {
+        await loadExpenses();
+      }
+    } catch (error) {
+      const parsed =
+        parseApiError(error);
+
+      setExpenseError(
+        parsed.message,
+      );
+    } finally {
+      setIsAddingExpense(false);
+    }
+  }
+
+
+  function handleExpenseFilterChange(
+    field,
+    value,
+  ) {
+    setExpenseFilters(
+      (current) => ({
+        ...current,
+        [field]: value,
+      }),
+    );
+  }
+
+
+  function handleApplyExpenseFilters(
+    event,
+  ) {
+    event.preventDefault();
+
+    setExpenseFilterError(
+      null,
+    );
+
+    const normalizedFilters = {
+      search:
+        String(
+          expenseFilters.search
+            ?? "",
+        )
+          .trim(),
+
+      start_date:
+        expenseFilters
+          .start_date
+        || "",
+
+      end_date:
+        expenseFilters
+          .end_date
+        || "",
+    };
+
+    if (
+      normalizedFilters
+        .start_date
+      &&
+      normalizedFilters
+        .end_date
+      &&
+      normalizedFilters
+        .start_date
+        >
+        normalizedFilters
+          .end_date
+    ) {
+      setExpenseFilterError(
+        (
+          "End date cannot be "
+          + "before start date."
+        ),
+      );
+
+      return;
+    }
+
+    setExpensePage(
+      1,
+    );
+
+    setAppliedExpenseFilters(
+      normalizedFilters,
+    );
+  }
+
+
+  function handleClearExpenseFilters() {
+    setExpenseFilterError(null);
+    setExpenseFilters(
+      EMPTY_EXPENSE_FILTERS,
+    );
+    setExpensePage(1);
+    setAppliedExpenseFilters(
+      EMPTY_EXPENSE_FILTERS,
+    );
+  }
+
+
+  function handleExpensePageChange(
+    nextPage,
+  ) {
+    if (
+      nextPage < 1
+      || nextPage > expenseTotalPages
+      || nextPage === expensePage
+    ) {
+      return;
+    }
+
+    setExpensePage(nextPage);
+    window.scrollTo({
+      top: 0,
+      behavior: "smooth",
+    });
+  }
+
+
   function handleOpenImport() {
     setImportPreview(null);
     setImportError(null);
@@ -1461,13 +1987,10 @@ function ReturnsPage() {
       );
 
     } catch (error) {
-      const parsed =
-        parseApiError(
-          error,
-        );
-
       setImportError(
-        parsed.message,
+        getReturnImportErrorMessage(
+          error,
+        ),
       );
 
     } finally {
@@ -1520,13 +2043,10 @@ function ReturnsPage() {
       await loadReturns();
 
     } catch (error) {
-      const parsed =
-        parseApiError(
-          error,
-        );
-
       setImportError(
-        parsed.message,
+        getReturnImportErrorMessage(
+          error,
+        ),
       );
 
     } finally {
@@ -1858,6 +2378,31 @@ function ReturnsPage() {
         >
           Stocked In
         </button>
+
+        <button
+          type="button"
+          role="tab"
+          aria-selected={
+            activeTab ===
+            "expenses"
+          }
+          className={
+            activeTab ===
+            "expenses"
+              ? (
+                  "returns-tab "
+                  + "returns-tab-active"
+                )
+              : "returns-tab"
+          }
+          onClick={() =>
+            setActiveTab(
+              "expenses",
+            )
+          }
+        >
+          Expenses
+        </button>
       </div>
 
 
@@ -1912,7 +2457,7 @@ function ReturnsPage() {
                   }
                   title={
                     !canActuallyAssignPriority
-                      ? "Only Admin can assign priority."
+                      ? "Only Admin or Sales can assign priority."
                       : (
                           selectedReturn
                             ? "Assign priority"
@@ -2011,6 +2556,17 @@ function ReturnsPage() {
           ) : null}
 
 
+          {doneError ? (
+            <AlertMessage
+              variant="error"
+              title="Unable to move return"
+              message={
+                doneError
+              }
+            />
+          ) : null}
+
+
           {loadError ? (
             <AlertMessage
               variant="error"
@@ -2090,6 +2646,15 @@ function ReturnsPage() {
                 canEdit={
                   canEditReturn
                 }
+                canAddExpense={
+                  canAddExpense
+                }
+                canCompleteReturn={
+                  canCompleteReturn
+                }
+                completingReturnId={
+                  completingReturnId
+                }
                 onSelectReturn={
                   handleSelectReturn
                 }
@@ -2104,6 +2669,12 @@ function ReturnsPage() {
                 }
                 onEdit={
                   handleOpenEdit
+                }
+                onExpense={
+                  handleOpenExpense
+                }
+                onDone={
+                  handleDoneReturn
                 }
               />
 
@@ -2331,6 +2902,33 @@ function ReturnsPage() {
           />
 
 
+          <ReturnExpenseDialog
+            isOpen={
+              Boolean(
+                expenseReturn,
+              )
+            }
+            returnRecord={
+              expenseReturn
+            }
+            isSubmitting={
+              isAddingExpense
+            }
+            errorMessage={
+              expenseError
+            }
+            onClose={() => {
+              if (!isAddingExpense) {
+                setExpenseReturn(null);
+                setExpenseError(null);
+              }
+            }}
+            onSubmit={
+              handleExpenseSubmit
+            }
+          />
+
+
           <ConfirmDialog
             isOpen={
               isStockInConfirmOpen
@@ -2369,7 +2967,8 @@ function ReturnsPage() {
             }
           />
         </>
-      ) : (
+      ) : activeTab ===
+      "stocked_in" ? (
         <section className="returns-tab-content">
           <div className="returns-action-row">
             <div>
@@ -2523,7 +3122,107 @@ function ReturnsPage() {
             </>
           ) : null}
         </section>
-      )}
+      ) : null}
+
+      {activeTab ===
+      "expenses" ? (
+        <section className="returns-tab-content">
+          <div className="returns-action-row">
+            <div>
+              <h2>Expenses</h2>
+              <p>
+                {expenseCount}
+                {" "}
+                expense record
+                {expenseCount === 1 ? "" : "s"}
+              </p>
+            </div>
+
+            <div className="return-expense-total-card">
+              <span>Total Expenses</span>
+              <strong>
+                {new Intl.NumberFormat(
+                  "en-IN",
+                  {
+                    style: "currency",
+                    currency: "INR",
+                    minimumFractionDigits: 2,
+                  },
+                ).format(
+                  Number(expenseTotal),
+                )}
+              </strong>
+            </div>
+          </div>
+
+          <ReturnExpensesFilters
+            filters={expenseFilters}
+            disabled={expensesLoading}
+            onChange={handleExpenseFilterChange}
+            onApply={handleApplyExpenseFilters}
+            onClear={handleClearExpenseFilters}
+          />
+
+          {expenseFilterError ? (
+            <AlertMessage
+              variant="error"
+              title="Invalid filters"
+              message={expenseFilterError}
+            />
+          ) : null}
+
+          {expensesError ? (
+            <AlertMessage
+              variant="error"
+              title="Unable to load expenses"
+              message={expensesError}
+            >
+              <button
+                type="button"
+                className="button button-secondary"
+                onClick={loadExpenses}
+              >
+                Try again
+              </button>
+            </AlertMessage>
+          ) : null}
+
+          {expensesLoading ? (
+            <LoadingState
+              title="Loading expenses"
+              message="Retrieving return expenses from Django."
+              size="large"
+            />
+          ) : null}
+
+          {!expensesLoading
+          && !expensesError
+          && expenses.length === 0 ? (
+            <EmptyState
+              title="No expenses found"
+              message="No return expenses match the current filters."
+            />
+          ) : null}
+
+          {!expensesLoading
+          && !expensesError
+          && expenses.length > 0 ? (
+            <>
+              <ReturnExpensesTable
+                expenses={expenses}
+              />
+
+              <Pagination
+                currentPage={expensePage}
+                totalPages={expenseTotalPages}
+                hasNextPage={expenseHasNext}
+                hasPreviousPage={expenseHasPrevious}
+                onPageChange={handleExpensePageChange}
+              />
+            </>
+          ) : null}
+        </section>
+      ) : null}
     </section>
   );
 }

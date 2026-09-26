@@ -171,18 +171,20 @@ function App() {
 
 
           <Route
-            path="/orders/dispatched"
             element={
-              <RoleRoute
-                allowedRoles={[
-                  "admin",
-                  "sales",
-                ]}
-              >
-                <DispatchedOrdersPage />
-              </RoleRoute>
+              <PermissionRoute
+                permission="inventory.view_order"
+                redirectTo="/access-denied"
+              />
             }
-          />
+          >
+            <Route
+              path="/orders/dispatched"
+              element={
+                <DispatchedOrdersPage />
+              }
+            />
+          </Route>
 
           <Route
             element={

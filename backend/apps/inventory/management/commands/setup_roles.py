@@ -95,6 +95,8 @@ class Command(
 
         technician_group.permissions.set(
             self._permissions(
+                "view_laptop",
+                "view_order",
                 "view_return",
                 "change_return",
                 "export_return",
